@@ -183,10 +183,10 @@ async function showAdminPanel(ctx) {
 
     const staffInfo = await getStaffInfo(userId)
 
-    // Get pending orders count
+    // Get pending orders count (simple query)
     const pendingSnapshot = await db.collection("transactions").where("status", "==", "pending").get()
 
-    // Get active chats count
+    // Get active chats count (simple query)
     const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
 
     let panelText = `🏪 SHOP KEEPER PANEL\n\n`
@@ -359,12 +359,7 @@ async function setupBot() {
 
         console.log(`Admin ${userId} clicked View Orders`)
 
-        const ordersSnapshot = await db
-          .collection("transactions")
-          .where("status", "==", "pending")
-          .orderBy("createdAt", "desc")
-          .limit(10)
-          .get()
+        const ordersSnapshot = await db.collection("transactions").where("status", "==", "pending").get()
 
         if (ordersSnapshot.empty) {
           await ctx.reply(
@@ -381,9 +376,18 @@ async function setupBot() {
           return
         }
 
+        // Sort by createdAt in memory and limit to 10
+        const sortedDocs = ordersSnapshot.docs
+          .sort((a, b) => {
+            const aTime = a.data().createdAt?.toDate?.() || new Date(0)
+            const bTime = b.data().createdAt?.toDate?.() || new Date(0)
+            return bTime - aTime // Descending order
+          })
+          .slice(0, 10)
+
         let ordersList = "📋 PENDING ORDERS\n\n"
 
-        ordersSnapshot.docs.forEach((doc, index) => {
+        sortedDocs.forEach((doc, index) => {
           const order = doc.data()
           const amountDisplay = order.type === "buy" ? `$${order.amount} USD worth of` : `${order.amount}`
 
@@ -412,11 +416,7 @@ async function setupBot() {
 
         console.log(`Admin ${userId} clicked Active Chats`)
 
-        const activeChatsSnapshot = await db
-          .collection("chatSessions")
-          .where("status", "==", "active")
-          .orderBy("createdAt", "desc")
-          .get()
+        const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
 
         if (activeChatsSnapshot.empty) {
           await ctx.reply(
@@ -431,9 +431,16 @@ async function setupBot() {
           return
         }
 
+        // Sort by createdAt in memory
+        const sortedDocs = activeChatsSnapshot.docs.sort((a, b) => {
+          const aTime = a.data().createdAt?.toDate?.() || new Date(0)
+          const bTime = b.data().createdAt?.toDate?.() || new Date(0)
+          return bTime - aTime // Descending order
+        })
+
         let chatsList = "💬 ACTIVE CHATS\n\n"
 
-        for (const chatDoc of activeChatsSnapshot.docs) {
+        for (const chatDoc of sortedDocs) {
           const chat = chatDoc.data()
           const orderDoc = await db.collection("transactions").doc(chat.orderId).get()
           const order = orderDoc.data()
@@ -519,7 +526,7 @@ async function setupBot() {
 
         console.log(`Super Admin ${userId} clicked Statistics`)
 
-        // Get statistics from Firestore
+        // Get statistics from Firestore using simple queries
         const usersSnapshot = await db.collection("users").get()
         const transactionsSnapshot = await db.collection("transactions").get()
         const adminsSnapshot = await db.collection("admins").get()
@@ -532,7 +539,7 @@ async function setupBot() {
         const totalCustomerCare = careSnapshot.size
         const activeChats = activeChatsSnapshot.size
 
-        // Count transaction statuses
+        // Count transaction statuses in memory
         let pendingOrders = 0
         let completedOrders = 0
         let cancelledOrders = 0
@@ -809,12 +816,7 @@ async function setupBot() {
         const userId = ctx.from?.id
         if (!userId) return
 
-        const userTransactionsSnapshot = await db
-          .collection("transactions")
-          .where("userId", "==", userId)
-          .orderBy("createdAt", "desc")
-          .limit(10)
-          .get()
+        const userTransactionsSnapshot = await db.collection("transactions").where("userId", "==", userId).get()
 
         if (userTransactionsSnapshot.empty) {
           await ctx.reply(
@@ -831,9 +833,18 @@ async function setupBot() {
           return
         }
 
+        // Sort by createdAt in memory and limit to 10
+        const sortedDocs = userTransactionsSnapshot.docs
+          .sort((a, b) => {
+            const aTime = a.data().createdAt?.toDate?.() || new Date(0)
+            const bTime = b.data().createdAt?.toDate?.() || new Date(0)
+            return bTime - aTime // Descending order
+          })
+          .slice(0, 10)
+
         let transactionList = "📊 YOUR RECENT TRANSACTIONS\n\n"
 
-        userTransactionsSnapshot.docs.forEach((doc, index) => {
+        sortedDocs.forEach((doc, index) => {
           const tx = doc.data()
           const statusEmoji =
             {

@@ -22,10 +22,10 @@ const AVAILABLE_TOKENS = [
 // Storage
 const userSessions = new Map()
 const transactions = new Map()
-const chatSessions = new Map() // Separate chat tracking
+const chatSessions = new Map()
 const users = new Map()
-const admins = new Map() // Admin management
-const customerCareReps = new Map() // Customer care representatives
+const admins = new Map()
+const customerCareReps = new Map()
 
 // SUPER ADMIN IDs (Replace with your actual Telegram user ID from @userinfobot)
 const SUPER_ADMIN_IDS = new Set(["7763673217"]) // Add your ID here
@@ -53,10 +53,10 @@ function findTokenByContract(contractAddress) {
 }
 
 function getTokenDisplayInfo(token) {
-  return `📋 **Token Information:**
+  return `📋 Token Information:
 🏷️ Name: ${token.name}
 🔤 Symbol: ${token.symbol}
-📍 Contract: \`${token.contractAddress}\``
+📍 Contract: ${token.contractAddress}`
 }
 
 function generateTransactionId() {
@@ -128,7 +128,7 @@ async function setupBot() {
       })
 
       await ctx.reply(
-        "🤖 **Welcome to Crypto Exchange Bot!**\n\n" +
+        "🤖 Welcome to Crypto Exchange Bot!\n\n" +
           "Your trusted platform for cryptocurrency trading.\n\n" +
           "What would you like to do today?",
         {
@@ -141,7 +141,6 @@ async function setupBot() {
             resize_keyboard: true,
             one_time_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
 
@@ -175,7 +174,7 @@ async function setupBot() {
       tokenButtons.push([{ text: "🔙 Back to Menu" }])
 
       await ctx.reply(
-        `💼 **${transactionType.toUpperCase()} CRYPTOCURRENCY**\n\n` +
+        `💼 ${transactionType.toUpperCase()} CRYPTOCURRENCY\n\n` +
           `Please select the token you want to ${transactionType}:`,
         {
           reply_markup: {
@@ -183,7 +182,6 @@ async function setupBot() {
             resize_keyboard: true,
             one_time_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
 
@@ -197,17 +195,16 @@ async function setupBot() {
   // Available Tokens
   bot.hears("📋 Available Tokens", async (ctx) => {
     try {
-      let tokenList = "📋 **AVAILABLE CRYPTOCURRENCIES**\n\n"
+      let tokenList = "📋 AVAILABLE CRYPTOCURRENCIES\n\n"
 
       AVAILABLE_TOKENS.forEach((token, index) => {
-        tokenList += `${index + 1}. **${token.name}** (${token.symbol})\n`
-        tokenList += `   📍 Contract: \`${token.contractAddress}\`\n\n`
+        tokenList += `${index + 1}. ${token.name} (${token.symbol})\n`
+        tokenList += `   📍 Contract: ${token.contractAddress}\n\n`
       })
 
       tokenList += "💡 You can also trade custom tokens using contract addresses!"
 
       await ctx.reply(tokenList, {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Menu" }]],
           resize_keyboard: true,
@@ -232,19 +229,18 @@ async function setupBot() {
 
       if (userTransactions.length === 0) {
         await ctx.reply(
-          "📊 **YOUR ORDERS**\n\n" + "You have no orders yet.\n\n" + "Start trading by selecting Buy or Sell!",
+          "📊 YOUR ORDERS\n\n" + "You have no orders yet.\n\n" + "Start trading by selecting Buy or Sell!",
           {
             reply_markup: {
               keyboard: [[{ text: "🔙 Back to Menu" }]],
               resize_keyboard: true,
             },
-            parse_mode: "Markdown",
           },
         )
         return
       }
 
-      let orderList = "📊 **YOUR RECENT ORDERS**\n\n"
+      let orderList = "📊 YOUR RECENT ORDERS\n\n"
 
       userTransactions.forEach((tx, index) => {
         const statusEmoji =
@@ -255,14 +251,13 @@ async function setupBot() {
             cancelled: "❌ Cancelled",
           }[tx.status] || "❓ Unknown"
 
-        orderList += `**${index + 1}. ${tx.type.toUpperCase()} ${tx.coin}**\n`
+        orderList += `${index + 1}. ${tx.type.toUpperCase()} ${tx.coin}\n`
         orderList += `   🆔 Order ID: #${tx.id}\n`
         orderList += `   📊 Status: ${statusEmoji}\n`
         orderList += `   📅 Date: ${new Date(tx.createdAt).toLocaleDateString()}\n\n`
       })
 
       await ctx.reply(orderList, {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Menu" }]],
           resize_keyboard: true,
@@ -278,22 +273,21 @@ async function setupBot() {
   bot.hears("❓ Help & Support", async (ctx) => {
     try {
       const helpText =
-        "❓ **HELP & SUPPORT**\n\n" +
-        "**How to use this bot:**\n" +
+        "❓ HELP & SUPPORT\n\n" +
+        "How to use this bot:\n" +
         "1️⃣ Select Buy or Sell\n" +
         "2️⃣ Choose your cryptocurrency\n" +
         "3️⃣ Confirm your order\n" +
         "4️⃣ Chat with our support team\n\n" +
-        "**Available Commands:**\n" +
+        "Available Commands:\n" +
         "• /start - Main menu\n" +
         "• /help - Show this help\n\n" +
-        "**Need assistance?**\n" +
+        "Need assistance?\n" +
         "Our customer care team is available 24/7 to help you with your trades!\n\n" +
-        "**Security Notice:**\n" +
+        "Security Notice:\n" +
         "Never share your private keys or wallet passwords with anyone!"
 
       await ctx.reply(helpText, {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Menu" }]],
           resize_keyboard: true,
@@ -319,7 +313,7 @@ async function setupBot() {
 
       userSessions.set(userId, { step: "main_menu" })
 
-      await ctx.reply("🤖 **Welcome back!**\n\nWhat would you like to do?", {
+      await ctx.reply("🤖 Welcome back!\n\nWhat would you like to do?", {
         reply_markup: {
           keyboard: [
             [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
@@ -329,7 +323,6 @@ async function setupBot() {
           resize_keyboard: true,
           one_time_keyboard: true,
         },
-        parse_mode: "Markdown",
       })
     } catch (error) {
       console.error("Error going back to menu:", error)
@@ -353,17 +346,16 @@ async function setupBot() {
       userSessions.set(userId, session)
 
       await ctx.reply(
-        "🔍 **CUSTOM TOKEN SEARCH**\n\n" +
+        "🔍 CUSTOM TOKEN SEARCH\n\n" +
           "Please send the contract address of the token you want to trade.\n\n" +
-          "**Example:**\n" +
-          "`0x1234567890abcdef1234567890abcdef12345678`\n\n" +
+          "Example:\n" +
+          "0x1234567890abcdef1234567890abcdef12345678\n\n" +
           "⚠️ Make sure the address is correct!",
         {
           reply_markup: {
             keyboard: [[{ text: "🔙 Back to Token List" }]],
             resize_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
     } catch (error) {
@@ -392,7 +384,7 @@ async function setupBot() {
       tokenButtons.push([{ text: "🔙 Back to Menu" }])
 
       await ctx.reply(
-        `💼 **${session.transactionType?.toUpperCase()} CRYPTOCURRENCY**\n\n` +
+        `💼 ${session.transactionType?.toUpperCase()} CRYPTOCURRENCY\n\n` +
           `Please select the token you want to ${session.transactionType}:`,
         {
           reply_markup: {
@@ -400,7 +392,6 @@ async function setupBot() {
             resize_keyboard: true,
             one_time_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
     } catch (error) {
@@ -436,9 +427,9 @@ async function setupBot() {
 
       await ctx.reply(
         `${tokenInfo}\n\n` +
-          `📋 **ORDER CONFIRMATION**\n\n` +
-          `🔄 Action: **${session.transactionType?.toUpperCase()}**\n` +
-          `🪙 Token: **${selectedToken.name}**\n\n` +
+          `📋 ORDER CONFIRMATION\n\n` +
+          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
+          `🪙 Token: ${selectedToken.name}\n\n` +
           `Is this correct?`,
         {
           reply_markup: {
@@ -446,7 +437,6 @@ async function setupBot() {
             resize_keyboard: true,
             one_time_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
 
@@ -471,7 +461,7 @@ async function setupBot() {
 
       if (ctx.message?.text === "❌ Cancel Order") {
         userSessions.set(userId, { step: "main_menu" })
-        await ctx.reply("❌ **Order Cancelled**\n\nWhat would you like to do?", {
+        await ctx.reply("❌ Order Cancelled\n\nWhat would you like to do?", {
           reply_markup: {
             keyboard: [
               [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
@@ -480,7 +470,6 @@ async function setupBot() {
             ],
             resize_keyboard: true,
           },
-          parse_mode: "Markdown",
         })
         return
       }
@@ -515,12 +504,12 @@ async function setupBot() {
       userSessions.set(userId, session)
 
       await ctx.reply(
-        `✅ **ORDER CREATED SUCCESSFULLY!**\n\n` +
-          `🆔 Order ID: **#${orderId}**\n` +
-          `🔄 Action: **${session.transactionType?.toUpperCase()}**\n` +
-          `🪙 Token: **${session.coin}**\n` +
-          `📊 Status: **Pending**\n\n` +
-          `🎯 **Next Steps:**\n` +
+        `✅ ORDER CREATED SUCCESSFULLY!\n\n` +
+          `🆔 Order ID: #${orderId}\n` +
+          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
+          `🪙 Token: ${session.coin}\n` +
+          `📊 Status: Pending\n\n` +
+          `🎯 Next Steps:\n` +
           `Our customer care team will contact you shortly to process your order.\n\n` +
           `💬 You can send messages here and they will be forwarded to our support team.`,
         {
@@ -528,26 +517,25 @@ async function setupBot() {
             keyboard: [[{ text: "🔄 New Order" }, { text: "📊 My Orders" }]],
             resize_keyboard: true,
           },
-          parse_mode: "Markdown",
         },
       )
 
       // Notify all staff members
       const userInfo = getUserInfo(ctx)
-      const tokenInfo = session.contractAddress ? `\n📍 Contract: \`${session.contractAddress}\`` : ""
+      const tokenInfo = session.contractAddress ? `\n📍 Contract: ${session.contractAddress}` : ""
 
       const staffNotification =
-        `🚨 **NEW ORDER ALERT!**\n\n` +
+        `🚨 NEW ORDER ALERT!\n\n` +
         `👤 Customer: ${userInfo}\n` +
-        `🔄 Action: **${session.transactionType?.toUpperCase()}**\n` +
-        `🪙 Token: **${session.coin}**${tokenInfo}\n` +
-        `🆔 Order ID: **#${orderId}**\n\n` +
+        `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
+        `🪙 Token: ${session.coin}${tokenInfo}\n` +
+        `🆔 Order ID: #${orderId}\n\n` +
         `💼 Use /take ${orderId} to handle this order`
 
       // Notify admins
       for (const [adminId, admin] of admins) {
         try {
-          await bot.api.sendMessage(adminId, staffNotification, { parse_mode: "Markdown" })
+          await bot.api.sendMessage(adminId, staffNotification)
         } catch (error) {
           console.error(`Error notifying admin ${adminId}:`, error)
         }
@@ -556,7 +544,7 @@ async function setupBot() {
       // Notify customer care reps
       for (const [repId, rep] of customerCareReps) {
         try {
-          await bot.api.sendMessage(repId, staffNotification, { parse_mode: "Markdown" })
+          await bot.api.sendMessage(repId, staffNotification)
         } catch (error) {
           console.error(`Error notifying rep ${repId}:`, error)
         }
@@ -577,7 +565,7 @@ async function setupBot() {
 
       userSessions.set(userId, { step: "main_menu" })
 
-      await ctx.reply("🤖 **Create New Order**\n\nWhat would you like to do?", {
+      await ctx.reply("🤖 Create New Order\n\nWhat would you like to do?", {
         reply_markup: {
           keyboard: [
             [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
@@ -587,7 +575,6 @@ async function setupBot() {
           resize_keyboard: true,
           one_time_keyboard: true,
         },
-        parse_mode: "Markdown",
       })
     } catch (error) {
       console.error("Error in new order:", error)
@@ -607,7 +594,7 @@ async function setupBot() {
     const pendingOrders = Array.from(transactions.values()).filter((t) => t.status === "pending").length
     const activeChats = Array.from(chatSessions.values()).filter((c) => c.status === "active").length
 
-    let panelText = `👨‍💼 **ADMIN PANEL**\n\n`
+    let panelText = `👨‍💼 ADMIN PANEL\n\n`
     panelText += `👤 Welcome: ${staffInfo}\n`
     panelText += `📊 Pending Orders: ${pendingOrders}\n`
     panelText += `💬 Active Chats: ${activeChats}\n\n`
@@ -626,7 +613,6 @@ async function setupBot() {
         keyboard: keyboard,
         resize_keyboard: true,
       },
-      parse_mode: "Markdown",
     })
   }
 
@@ -679,26 +665,24 @@ async function setupBot() {
       const staffInfo = getStaffInfo(userId)
 
       await ctx.reply(
-        `✅ **ORDER ASSIGNED**\n\n` +
+        `✅ ORDER ASSIGNED\n\n` +
           `🆔 Order ID: #${orderId}\n` +
           `👤 Customer: ${userInfo}\n` +
           `🔄 Action: ${order.type.toUpperCase()}\n` +
           `🪙 Token: ${order.coin}\n\n` +
-          `💬 **Chat Commands:**\n` +
+          `💬 Chat Commands:\n` +
           `• Type messages to chat with customer\n` +
           `• /complete ${orderId} - Mark order as completed\n` +
           `• /cancel ${orderId} - Cancel the order\n\n` +
           `All your messages will be sent to the customer.`,
-        { parse_mode: "Markdown" },
       )
 
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `👨‍💼 **SUPPORT CONNECTED**\n\n` +
+        `👨‍💼 SUPPORT CONNECTED\n\n` +
           `${staffInfo} has been assigned to your order #${orderId}\n\n` +
           `💬 You can now chat directly with our support team. All messages you send will be forwarded to them.`,
-        { parse_mode: "Markdown" },
       )
 
       console.log(`📞 Order ${orderId} assigned to staff ${staffInfo}`)
@@ -751,10 +735,9 @@ async function setupBot() {
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `✅ **ORDER COMPLETED**\n\n` +
+        `✅ ORDER COMPLETED\n\n` +
           `Your order #${orderId} has been successfully completed!\n\n` +
           `Thank you for using our service. Type /start to create a new order.`,
-        { parse_mode: "Markdown" },
       )
 
       console.log(`✅ Order ${orderId} completed by staff ${getStaffInfo(userId)}`)
@@ -807,10 +790,9 @@ async function setupBot() {
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `❌ **ORDER CANCELLED**\n\n` +
+        `❌ ORDER CANCELLED\n\n` +
           `Your order #${orderId} has been cancelled.\n\n` +
           `If you have any questions, please contact our support team. Type /start to create a new order.`,
-        { parse_mode: "Markdown" },
       )
 
       console.log(`❌ Order ${orderId} cancelled by staff ${getStaffInfo(userId)}`)
@@ -861,10 +843,9 @@ async function setupBot() {
       try {
         await bot.api.sendMessage(
           newAdminId,
-          `🎉 **ADMIN ACCESS GRANTED**\n\n` +
+          `🎉 ADMIN ACCESS GRANTED\n\n` +
             `You have been granted admin access to the Crypto Exchange Bot.\n\n` +
             `Type /start to access the admin panel.`,
-          { parse_mode: "Markdown" },
         )
       } catch (error) {
         console.log("Could not notify new admin (they may need to start the bot first)")
@@ -913,10 +894,9 @@ async function setupBot() {
       try {
         await bot.api.sendMessage(
           repId,
-          `🎉 **CUSTOMER CARE ACCESS GRANTED**\n\n` +
+          `🎉 CUSTOMER CARE ACCESS GRANTED\n\n` +
             `You have been granted customer care access to the Crypto Exchange Bot.\n\n` +
             `Type /start to access the staff panel.`,
-          { parse_mode: "Markdown" },
         )
       } catch (error) {
         console.log("Could not notify new rep (they may need to start the bot first)")
@@ -949,11 +929,10 @@ async function setupBot() {
 
         if (!isValidContractAddress(contractAddress)) {
           await ctx.reply(
-            "❌ **Invalid Contract Address**\n\n" +
+            "❌ Invalid Contract Address\n\n" +
               "Please provide a valid Ethereum contract address.\n\n" +
-              "**Format:** 0x followed by 40 hexadecimal characters\n" +
-              "**Example:** `0x1234567890abcdef1234567890abcdef12345678`",
-            { parse_mode: "Markdown" },
+              "Format: 0x followed by 40 hexadecimal characters\n" +
+              "Example: 0x1234567890abcdef1234567890abcdef12345678",
           )
           return
         }
@@ -967,10 +946,10 @@ async function setupBot() {
           tokenName = knownToken.name
         } else {
           tokenInfo =
-            `📋 **Custom Token Information:**\n` +
+            `📋 Custom Token Information:\n` +
             `🏷️ Name: Unknown Token\n` +
             `🔤 Symbol: Unknown\n` +
-            `📍 Contract: \`${contractAddress}\`\n\n` +
+            `📍 Contract: ${contractAddress}\n\n` +
             `⚠️ This is a custom token not in our predefined list.`
           tokenName = `Custom Token (${contractAddress.substring(0, 8)}...)`
         }
@@ -982,9 +961,9 @@ async function setupBot() {
 
         await ctx.reply(
           `${tokenInfo}\n\n` +
-            `📋 **ORDER CONFIRMATION**\n\n` +
-            `🔄 Action: **${session.transactionType?.toUpperCase()}**\n` +
-            `🪙 Token: **${tokenName}**\n\n` +
+            `📋 ORDER CONFIRMATION\n\n` +
+            `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
+            `🪙 Token: ${tokenName}\n\n` +
             `Is this correct?`,
           {
             reply_markup: {
@@ -992,7 +971,6 @@ async function setupBot() {
               resize_keyboard: true,
               one_time_keyboard: true,
             },
-            parse_mode: "Markdown",
           },
         )
         return
@@ -1018,7 +996,7 @@ async function setupBot() {
 
         if (chatSession.status === "waiting_for_staff") {
           await ctx.reply(
-            "📤 **Message Sent**\n\n" +
+            "📤 Message Sent\n\n" +
               "Your message has been sent to our support team. Please wait for a response.\n\n" +
               "💡 Our team typically responds within a few minutes.",
           )
@@ -1029,14 +1007,13 @@ async function setupBot() {
 
           await bot.api.sendMessage(
             chatSession.staffId,
-            `💬 **Customer Message** (Order #${session.orderId})\n` +
+            `💬 Customer Message (Order #${session.orderId})\n` +
               `👤 From: ${userInfo}\n\n` +
               `"${messageText}"\n\n` +
               `💡 Reply directly to respond to the customer.`,
-            { parse_mode: "Markdown" },
           )
 
-          await ctx.reply("📤 **Message Sent**\n\nYour message has been forwarded to our support team.")
+          await ctx.reply("📤 Message Sent\n\nYour message has been forwarded to our support team.")
         }
 
         console.log(`💬 Customer message in order ${session.orderId}: ${messageText}`)
@@ -1067,9 +1044,7 @@ async function setupBot() {
 
             // Forward to customer
             const staffInfo = getStaffInfo(userId)
-            await bot.api.sendMessage(order.userId, `👨‍💼 **${staffInfo}:**\n\n${messageText}`, {
-              parse_mode: "Markdown",
-            })
+            await bot.api.sendMessage(order.userId, `👨‍💼 ${staffInfo}:\n\n${messageText}`)
 
             await ctx.reply(`📤 Message sent to customer (Order #${chatSession.orderId})`)
             console.log(`💬 Staff message sent to customer in order ${chatSession.orderId}`)
@@ -1115,7 +1090,7 @@ async function setupBot() {
 
       if (pendingOrders.length === 0) {
         await ctx.reply(
-          "📋 **PENDING ORDERS**\n\n" +
+          "📋 PENDING ORDERS\n\n" +
             "No pending orders at the moment.\n\n" +
             "New orders will appear here automatically.",
           {
@@ -1123,19 +1098,18 @@ async function setupBot() {
               keyboard: [[{ text: "🔙 Back to Panel" }]],
               resize_keyboard: true,
             },
-            parse_mode: "Markdown",
           },
         )
         return
       }
 
-      let ordersList = "📋 **PENDING ORDERS**\n\n"
+      let ordersList = "📋 PENDING ORDERS\n\n"
 
       pendingOrders.forEach((order, index) => {
         const user = users.get(order.userId)
         const userInfo = user?.username ? `@${user.username}` : user?.first_name || "Unknown"
 
-        ordersList += `**${index + 1}. ${order.type.toUpperCase()} ${order.coin}**\n`
+        ordersList += `${index + 1}. ${order.type.toUpperCase()} ${order.coin}\n`
         ordersList += `   👤 Customer: ${userInfo}\n`
         ordersList += `   🆔 Order ID: #${order.id}\n`
         ordersList += `   📅 Created: ${new Date(order.createdAt).toLocaleString()}\n`
@@ -1143,7 +1117,6 @@ async function setupBot() {
       })
 
       await ctx.reply(ordersList, {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Panel" }]],
           resize_keyboard: true,
@@ -1171,19 +1144,18 @@ async function setupBot() {
 
       if (activeChats.length === 0) {
         await ctx.reply(
-          "💬 **ACTIVE CHATS**\n\n" + "No active chats at the moment.\n\n" + "Active conversations will appear here.",
+          "💬 ACTIVE CHATS\n\n" + "No active chats at the moment.\n\n" + "Active conversations will appear here.",
           {
             reply_markup: {
               keyboard: [[{ text: "🔙 Back to Panel" }]],
               resize_keyboard: true,
             },
-            parse_mode: "Markdown",
           },
         )
         return
       }
 
-      let chatsList = "💬 **ACTIVE CHATS**\n\n"
+      let chatsList = "💬 ACTIVE CHATS\n\n"
 
       activeChats.forEach((chat, index) => {
         const order = transactions.get(chat.orderId)
@@ -1191,7 +1163,7 @@ async function setupBot() {
         const staff = getStaffInfo(chat.staffId)
         const userInfo = user?.username ? `@${user.username}` : user?.first_name || "Unknown"
 
-        chatsList += `**${index + 1}. Order #${chat.orderId}**\n`
+        chatsList += `${index + 1}. Order #${chat.orderId}\n`
         chatsList += `   👤 Customer: ${userInfo}\n`
         chatsList += `   👨‍💼 Staff: ${staff}\n`
         chatsList += `   🪙 Token: ${order?.coin || "Unknown"}\n`
@@ -1199,7 +1171,6 @@ async function setupBot() {
       })
 
       await ctx.reply(chatsList, {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Panel" }]],
           resize_keyboard: true,
@@ -1231,42 +1202,42 @@ async function setupBot() {
       if (!userId) return
 
       if (canHandleCustomers(userId)) {
-        let helpText = "👨‍💼 **STAFF HELP**\n\n"
-        helpText += "**Order Management:**\n"
+        let helpText = "👨‍💼 STAFF HELP\n\n"
+        helpText += "Order Management:\n"
         helpText += "• /take [order_id] - Take an order\n"
         helpText += "• /complete [order_id] - Complete order\n"
         helpText += "• /cancel [order_id] - Cancel order\n\n"
-        helpText += "**Chat:**\n"
+        helpText += "Chat:\n"
         helpText += "• Type messages to chat with customers\n"
         helpText += "• Messages are automatically forwarded\n\n"
 
         if (isSuperAdmin(userId)) {
-          helpText += "**Super Admin:**\n"
+          helpText += "Super Admin:\n"
           helpText += "• /addadmin [user_id] [name] - Add admin\n"
           helpText += "• /addcare [user_id] [name] - Add customer care\n\n"
         } else if (isAdmin(userId)) {
-          helpText += "**Admin:**\n"
+          helpText += "Admin:\n"
           helpText += "• /addcare [user_id] [name] - Add customer care\n\n"
         }
 
         helpText += "Use /start to access the admin panel."
 
-        await ctx.reply(helpText, { parse_mode: "Markdown" })
+        await ctx.reply(helpText)
       } else {
         const helpText =
-          "❓ **HELP & SUPPORT**\n\n" +
-          "**How to use this bot:**\n" +
+          "❓ HELP & SUPPORT\n\n" +
+          "How to use this bot:\n" +
           "1️⃣ Select Buy or Sell\n" +
           "2️⃣ Choose your cryptocurrency\n" +
           "3️⃣ Confirm your order\n" +
           "4️⃣ Chat with our support team\n\n" +
-          "**Available Commands:**\n" +
+          "Available Commands:\n" +
           "• /start - Main menu\n" +
           "• /help - Show this help\n\n" +
-          "**Need assistance?**\n" +
+          "Need assistance?\n" +
           "Our customer care team is available 24/7!"
 
-        await ctx.reply(helpText, { parse_mode: "Markdown" })
+        await ctx.reply(helpText)
       }
     } catch (error) {
       console.error("Error in help command:", error)

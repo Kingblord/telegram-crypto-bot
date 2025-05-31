@@ -48,6 +48,15 @@ function isValidContractAddress(address) {
   return /^0x[a-fA-F0-9]{40}$/.test(address)
 }
 
+function isValidAmount(amount) {
+  const num = Number.parseFloat(amount)
+  return !isNaN(num) && num > 0
+}
+
+function isValidTxHash(hash) {
+  return /^0x[a-fA-F0-9]{64}$/.test(hash)
+}
+
 function findTokenByContract(contractAddress) {
   return AVAILABLE_TOKENS.find((token) => token.contractAddress.toLowerCase() === contractAddress.toLowerCase())
 }
@@ -89,9 +98,9 @@ function getStaffInfo(userId) {
   if (admin) return `${admin.name} (${admin.role})`
 
   const rep = customerCareReps.get(userId.toString())
-  if (rep) return `${rep.name} (Customer Care)`
+  if (rep) return `${rep.name} (Shop Keeper)`
 
-  return "Staff Member"
+  return "Shop Keeper"
 }
 
 // Initialize bot
@@ -128,14 +137,15 @@ async function setupBot() {
       })
 
       await ctx.reply(
-        "🤖 Welcome to Crypto Exchange Bot!\n\n" +
-          "Your trusted platform for cryptocurrency trading.\n\n" +
+        "🏪 Welcome to Vintage & Crap Coin Store!\n\n" +
+          "Your quirky shop for all things crypto - from vintage gems to the latest crap coins! 💎💩\n\n" +
+          "🔥 Fast • Fun • Reliable\n\n" +
           "What would you like to do today?",
         {
           reply_markup: {
             keyboard: [
               [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Orders" }],
+              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
               [{ text: "❓ Help & Support" }],
             ],
             resize_keyboard: true,
@@ -173,9 +183,9 @@ async function setupBot() {
       tokenButtons.push([{ text: "🔍 Custom Token (Contract Address)" }])
       tokenButtons.push([{ text: "🔙 Back to Menu" }])
 
+      const actionText = transactionType === "buy" ? "purchase" : "sell"
       await ctx.reply(
-        `💼 ${transactionType.toUpperCase()} CRYPTOCURRENCY\n\n` +
-          `Please select the token you want to ${transactionType}:`,
+        `💼 ${transactionType.toUpperCase()} CRYPTOCURRENCY\n\n` + `Select the token you want to ${actionText}:`,
         {
           reply_markup: {
             keyboard: tokenButtons,
@@ -216,8 +226,8 @@ async function setupBot() {
     }
   })
 
-  // My Orders
-  bot.hears("📊 My Orders", async (ctx) => {
+  // My Transactions
+  bot.hears("📊 My Transactions", async (ctx) => {
     try {
       const userId = ctx.from?.id
       if (!userId) return
@@ -229,7 +239,7 @@ async function setupBot() {
 
       if (userTransactions.length === 0) {
         await ctx.reply(
-          "📊 YOUR ORDERS\n\n" + "You have no orders yet.\n\n" + "Start trading by selecting Buy or Sell!",
+          "📊 YOUR TRANSACTIONS\n\n" + "You have no transactions yet.\n\n" + "Start trading by selecting Buy or Sell!",
           {
             reply_markup: {
               keyboard: [[{ text: "🔙 Back to Menu" }]],
@@ -240,31 +250,33 @@ async function setupBot() {
         return
       }
 
-      let orderList = "📊 YOUR RECENT ORDERS\n\n"
+      let transactionList = "📊 YOUR RECENT TRANSACTIONS\n\n"
 
       userTransactions.forEach((tx, index) => {
         const statusEmoji =
           {
-            pending: "⏳ Pending",
+            pending: "⏳ Processing",
+            waiting_payment: "💳 Awaiting Payment",
+            payment_sent: "🔄 Payment Verification",
             in_progress: "🔄 Processing",
             completed: "✅ Completed",
             cancelled: "❌ Cancelled",
           }[tx.status] || "❓ Unknown"
 
-        orderList += `${index + 1}. ${tx.type.toUpperCase()} ${tx.coin}\n`
-        orderList += `   🆔 Order ID: #${tx.id}\n`
-        orderList += `   📊 Status: ${statusEmoji}\n`
-        orderList += `   📅 Date: ${new Date(tx.createdAt).toLocaleDateString()}\n\n`
+        transactionList += `${index + 1}. ${tx.type.toUpperCase()} ${tx.amount || ""} ${tx.coin}\n`
+        transactionList += `   🆔 Transaction ID: #${tx.id}\n`
+        transactionList += `   📊 Status: ${statusEmoji}\n`
+        transactionList += `   📅 Date: ${new Date(tx.createdAt).toLocaleDateString()}\n\n`
       })
 
-      await ctx.reply(orderList, {
+      await ctx.reply(transactionList, {
         reply_markup: {
           keyboard: [[{ text: "🔙 Back to Menu" }]],
           resize_keyboard: true,
         },
       })
     } catch (error) {
-      console.error("Error showing orders:", error)
+      console.error("Error showing transactions:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
     }
   })
@@ -274,18 +286,25 @@ async function setupBot() {
     try {
       const helpText =
         "❓ HELP & SUPPORT\n\n" +
-        "How to use this bot:\n" +
-        "1️⃣ Select Buy or Sell\n" +
-        "2️⃣ Choose your cryptocurrency\n" +
-        "3️⃣ Confirm your order\n" +
-        "4️⃣ Chat with our support team\n\n" +
-        "Available Commands:\n" +
-        "• /start - Main menu\n" +
-        "• /help - Show this help\n\n" +
-        "Need assistance?\n" +
-        "Our customer care team is available 24/7 to help you with your trades!\n\n" +
-        "Security Notice:\n" +
-        "Never share your private keys or wallet passwords with anyone!"
+        "🔹 How to Buy Crypto:\n" +
+        "1️⃣ Select 'Buy Crypto'\n" +
+        "2️⃣ Choose your token\n" +
+        "3️⃣ Enter amount to buy\n" +
+        "4️⃣ Make payment to provided address\n" +
+        "5️⃣ Submit transaction hash\n" +
+        "6️⃣ Receive your tokens\n\n" +
+        "🔹 How to Sell Crypto:\n" +
+        "1️⃣ Select 'Sell Crypto'\n" +
+        "2️⃣ Choose your token\n" +
+        "3️⃣ Enter amount to sell\n" +
+        "4️⃣ Send tokens to provided address\n" +
+        "5️⃣ Receive payment confirmation\n\n" +
+        "🔹 Security:\n" +
+        "• All transactions are verified on BSC\n" +
+        "• Never share private keys\n" +
+        "• Double-check all addresses\n\n" +
+        "🔹 Support:\n" +
+        "Our team is available 24/7 to assist you!"
 
       await ctx.reply(helpText, {
         reply_markup: {
@@ -313,11 +332,11 @@ async function setupBot() {
 
       userSessions.set(userId, { step: "main_menu" })
 
-      await ctx.reply("🤖 Welcome back!\n\nWhat would you like to do?", {
+      await ctx.reply("🏪 Welcome back to Vintage & Crap Coin Store!\n\nReady for more crypto adventures?", {
         reply_markup: {
           keyboard: [
             [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-            [{ text: "📋 Available Tokens" }, { text: "📊 My Orders" }],
+            [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
             [{ text: "❓ Help & Support" }],
           ],
           resize_keyboard: true,
@@ -348,7 +367,7 @@ async function setupBot() {
       await ctx.reply(
         "🔍 CUSTOM TOKEN SEARCH\n\n" +
           "Please send the contract address of the token you want to trade.\n\n" +
-          "Example:\n" +
+          "📝 Example:\n" +
           "0x1234567890abcdef1234567890abcdef12345678\n\n" +
           "⚠️ Make sure the address is correct!",
         {
@@ -383,9 +402,10 @@ async function setupBot() {
       tokenButtons.push([{ text: "🔍 Custom Token (Contract Address)" }])
       tokenButtons.push([{ text: "🔙 Back to Menu" }])
 
+      const actionText = session.transactionType === "buy" ? "purchase" : "sell"
       await ctx.reply(
         `💼 ${session.transactionType?.toUpperCase()} CRYPTOCURRENCY\n\n` +
-          `Please select the token you want to ${session.transactionType}:`,
+          `Select the token you want to ${actionText}:`,
         {
           reply_markup: {
             keyboard: tokenButtons,
@@ -419,23 +439,24 @@ async function setupBot() {
       }
 
       session.coin = selectedToken.name
+      session.symbol = selectedToken.symbol
       session.contractAddress = selectedToken.contractAddress
-      session.step = "confirm_order"
+      session.step = "enter_amount"
       userSessions.set(userId, session)
 
       const tokenInfo = getTokenDisplayInfo(selectedToken)
+      const actionText = session.transactionType === "buy" ? "purchase" : "sell"
+      const amountText = session.transactionType === "buy" ? "How much USD worth" : "How many tokens"
 
       await ctx.reply(
         `${tokenInfo}\n\n` +
-          `📋 ORDER CONFIRMATION\n\n` +
-          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-          `🪙 Token: ${selectedToken.name}\n\n` +
-          `Is this correct?`,
+          `💰 AMOUNT ENTRY\n\n` +
+          `${amountText} of ${selectedToken.symbol} would you like to ${actionText}?\n\n` +
+          `📝 Please enter the amount:`,
         {
           reply_markup: {
-            keyboard: [[{ text: "✅ Confirm Order" }, { text: "❌ Cancel Order" }]],
+            keyboard: [[{ text: "🔙 Back to Token List" }]],
             resize_keyboard: true,
-            one_time_keyboard: true,
           },
         },
       )
@@ -447,137 +468,36 @@ async function setupBot() {
     }
   })
 
-  // Order confirmation
-  bot.hears(["✅ Confirm Order", "❌ Cancel Order"], async (ctx) => {
+  // Paid button handler
+  bot.hears("✅ I Have Paid", async (ctx) => {
     try {
       const userId = ctx.from?.id
       if (!userId) return
 
       const session = userSessions.get(userId) || {}
-      if (session.step !== "confirm_order") {
+      if (session.step !== "payment_sent") {
         await ctx.reply("Please start over with /start")
         return
       }
 
-      if (ctx.message?.text === "❌ Cancel Order") {
-        userSessions.set(userId, { step: "main_menu" })
-        await ctx.reply("❌ Order Cancelled\n\nWhat would you like to do?", {
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Orders" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-          },
-        })
-        return
-      }
-
-      // Create order
-      const orderId = generateTransactionId()
-      const order = {
-        id: orderId,
-        userId: userId,
-        type: session.transactionType,
-        coin: session.coin,
-        contractAddress: session.contractAddress,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        assignedStaff: null,
-      }
-
-      transactions.set(orderId, order)
-
-      // Create chat session
-      chatSessions.set(orderId, {
-        orderId: orderId,
-        userId: userId,
-        staffId: null,
-        messages: [],
-        status: "waiting_for_staff",
-      })
-
-      session.orderId = orderId
-      session.step = "chat_with_support"
+      session.step = "enter_tx_hash"
       userSessions.set(userId, session)
 
       await ctx.reply(
-        `✅ ORDER CREATED SUCCESSFULLY!\n\n` +
-          `🆔 Order ID: #${orderId}\n` +
-          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-          `🪙 Token: ${session.coin}\n` +
-          `📊 Status: Pending\n\n` +
-          `🎯 Next Steps:\n` +
-          `Our customer care team will contact you shortly to process your order.\n\n` +
-          `💬 You can send messages here and they will be forwarded to our support team.`,
+        "📝 TRANSACTION HASH REQUIRED\n\n" +
+          "Please provide your transaction hash for verification.\n\n" +
+          "📋 Example:\n" +
+          "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\n\n" +
+          "⚠️ Make sure the hash is correct!",
         {
           reply_markup: {
-            keyboard: [[{ text: "🔄 New Order" }, { text: "📊 My Orders" }]],
+            keyboard: [[{ text: "🔙 Back to Menu" }]],
             resize_keyboard: true,
           },
         },
       )
-
-      // Notify all staff members
-      const userInfo = getUserInfo(ctx)
-      const tokenInfo = session.contractAddress ? `\n📍 Contract: ${session.contractAddress}` : ""
-
-      const staffNotification =
-        `🚨 NEW ORDER ALERT!\n\n` +
-        `👤 Customer: ${userInfo}\n` +
-        `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-        `🪙 Token: ${session.coin}${tokenInfo}\n` +
-        `🆔 Order ID: #${orderId}\n\n` +
-        `💼 Use /take ${orderId} to handle this order`
-
-      // Notify admins
-      for (const [adminId, admin] of admins) {
-        try {
-          await bot.api.sendMessage(adminId, staffNotification)
-        } catch (error) {
-          console.error(`Error notifying admin ${adminId}:`, error)
-        }
-      }
-
-      // Notify customer care reps
-      for (const [repId, rep] of customerCareReps) {
-        try {
-          await bot.api.sendMessage(repId, staffNotification)
-        } catch (error) {
-          console.error(`Error notifying rep ${repId}:`, error)
-        }
-      }
-
-      console.log(`✅ Order ${orderId} created for user ${getUserInfo(ctx)}`)
     } catch (error) {
-      console.error("Error in order confirmation:", error)
-      await ctx.reply("❌ Sorry, there was an error processing your order. Please try again.")
-    }
-  })
-
-  // New Order button
-  bot.hears("🔄 New Order", async (ctx) => {
-    try {
-      const userId = ctx.from?.id
-      if (!userId) return
-
-      userSessions.set(userId, { step: "main_menu" })
-
-      await ctx.reply("🤖 Create New Order\n\nWhat would you like to do?", {
-        reply_markup: {
-          keyboard: [
-            [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-            [{ text: "📋 Available Tokens" }, { text: "📊 My Orders" }],
-            [{ text: "❓ Help & Support" }],
-          ],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
-      })
-    } catch (error) {
-      console.error("Error in new order:", error)
+      console.error("Error in paid button:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
     }
   })
@@ -594,7 +514,7 @@ async function setupBot() {
     const pendingOrders = Array.from(transactions.values()).filter((t) => t.status === "pending").length
     const activeChats = Array.from(chatSessions.values()).filter((c) => c.status === "active").length
 
-    let panelText = `👨‍💼 ADMIN PANEL\n\n`
+    let panelText = `🏪 SHOP KEEPER PANEL\n\n`
     panelText += `👤 Welcome: ${staffInfo}\n`
     panelText += `📊 Pending Orders: ${pendingOrders}\n`
     panelText += `💬 Active Chats: ${activeChats}\n\n`
@@ -606,7 +526,7 @@ async function setupBot() {
       keyboard.push([{ text: "👥 Manage Staff" }, { text: "📊 Statistics" }])
     }
 
-    keyboard.push([{ text: "❓ Admin Help" }])
+    keyboard.push([{ text: "❓ CS Help" }])
 
     await ctx.reply(panelText, {
       reply_markup: {
@@ -662,32 +582,215 @@ async function setupBot() {
 
       const user = users.get(order.userId)
       const userInfo = user?.username ? `@${user.username}` : user?.first_name || "Unknown"
-      const staffInfo = getStaffInfo(userId)
 
       await ctx.reply(
         `✅ ORDER ASSIGNED\n\n` +
           `🆔 Order ID: #${orderId}\n` +
           `👤 Customer: ${userInfo}\n` +
           `🔄 Action: ${order.type.toUpperCase()}\n` +
-          `🪙 Token: ${order.coin}\n\n` +
-          `💬 Chat Commands:\n` +
-          `• Type messages to chat with customer\n` +
-          `• /complete ${orderId} - Mark order as completed\n` +
-          `• /cancel ${orderId} - Cancel the order\n\n` +
-          `All your messages will be sent to the customer.`,
+          `🪙 Token: ${order.amount} ${order.symbol || order.coin}\n\n` +
+          `💬 Available Commands:\n` +
+          `• /wallet [order_id] [address] - Send wallet address\n` +
+          `• /payment [order_id] [address] - Send payment address\n` +
+          `• /send [order_id] [amount] [hash] - Send tokens with hash\n` +
+          `• /complete [order_id] - Complete transaction\n` +
+          `• /cancel [order_id] - Cancel transaction\n\n` +
+          `Type messages to chat with customer.`,
       )
 
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `👨‍💼 SUPPORT CONNECTED\n\n` +
-          `${staffInfo} has been assigned to your order #${orderId}\n\n` +
-          `💬 You can now chat directly with our support team. All messages you send will be forwarded to them.`,
+        `🔄 PROCESSING UPDATE\n\n` +
+          `Your ${order.type} request for ${order.amount} ${order.symbol || order.coin} is now being processed.\n\n` +
+          `Our team will contact you shortly with the next steps.\n\n` +
+          `💬 You can send messages here if you have any questions.`,
       )
 
-      console.log(`📞 Order ${orderId} assigned to staff ${staffInfo}`)
+      console.log(`📞 Order ${orderId} assigned to staff ${getStaffInfo(userId)}`)
     } catch (error) {
       console.error("Error in take command:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Wallet command - Send wallet address to customer
+  bot.command("wallet", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !canHandleCustomers(userId)) {
+        await ctx.reply("❌ You are not authorized to use this command.")
+        return
+      }
+
+      const args = ctx.match?.trim().split(" ")
+      if (!args || args.length < 2) {
+        await ctx.reply("❌ Usage: /wallet [order_id] [wallet_address]")
+        return
+      }
+
+      const orderId = args[0]
+      const walletAddress = args[1]
+
+      const order = transactions.get(orderId)
+      if (!order) {
+        await ctx.reply("❌ Order not found.")
+        return
+      }
+
+      if (order.assignedStaff !== userId && !isSuperAdmin(userId)) {
+        await ctx.reply("❌ You can only handle orders assigned to you.")
+        return
+      }
+
+      // Update order status
+      order.status = "waiting_payment"
+      order.walletAddress = walletAddress
+      order.updatedAt = new Date().toISOString()
+      transactions.set(orderId, order)
+
+      await ctx.reply(`✅ Wallet address sent to customer for order #${orderId}`)
+
+      // Send wallet address to customer
+      await bot.api.sendMessage(
+        order.userId,
+        `📍 WALLET ADDRESS PROVIDED\n\n` +
+          `Please send your ${order.amount} ${order.symbol || order.coin} to the following address:\n\n` +
+          `📋 Address: \`${walletAddress}\`\n\n` +
+          `⚠️ IMPORTANT:\n` +
+          `• Send ONLY ${order.symbol || order.coin} tokens\n` +
+          `• Send exactly ${order.amount} tokens\n` +
+          `• Double-check the address\n` +
+          `• Use BSC network\n\n` +
+          `After sending, please provide your transaction hash for verification.`,
+        { parse_mode: "Markdown" },
+      )
+
+      console.log(`📍 Wallet address sent for order ${orderId}`)
+    } catch (error) {
+      console.error("Error in wallet command:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Payment command - Send payment address to customer
+  bot.command("payment", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !canHandleCustomers(userId)) {
+        await ctx.reply("❌ You are not authorized to use this command.")
+        return
+      }
+
+      const args = ctx.match?.trim().split(" ")
+      if (!args || args.length < 2) {
+        await ctx.reply("❌ Usage: /payment [order_id] [payment_address]")
+        return
+      }
+
+      const orderId = args[0]
+      const paymentAddress = args[1]
+
+      const order = transactions.get(orderId)
+      if (!order) {
+        await ctx.reply("❌ Order not found.")
+        return
+      }
+
+      if (order.assignedStaff !== userId && !isSuperAdmin(userId)) {
+        await ctx.reply("❌ You can only handle orders assigned to you.")
+        return
+      }
+
+      // Update order status
+      order.status = "waiting_payment"
+      order.paymentAddress = paymentAddress
+      order.updatedAt = new Date().toISOString()
+      transactions.set(orderId, order)
+
+      await ctx.reply(`✅ Payment address sent to customer for order #${orderId}`)
+
+      // Send payment address to customer
+      await bot.api.sendMessage(
+        order.userId,
+        `💳 PAYMENT ADDRESS PROVIDED\n\n` +
+          `Please send your payment to the following address:\n\n` +
+          `📋 Address: \`${paymentAddress}\`\n\n` +
+          `💰 Amount: $${order.amount} USD worth of USDT/BUSD\n\n` +
+          `⚠️ IMPORTANT:\n` +
+          `• Send ONLY USDT or BUSD\n` +
+          `• Send exactly $${order.amount} worth\n` +
+          `• Use BSC network\n` +
+          `• Double-check the address\n\n` +
+          `After payment, click the button below and provide your transaction hash.`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            keyboard: [[{ text: "✅ I Have Paid" }]],
+            resize_keyboard: true,
+          },
+        },
+      )
+
+      console.log(`💳 Payment address sent for order ${orderId}`)
+    } catch (error) {
+      console.error("Error in payment command:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Send command - Send tokens to customer with transaction hash
+  bot.command("send", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !canHandleCustomers(userId)) {
+        await ctx.reply("❌ You are not authorized to use this command.")
+        return
+      }
+
+      const args = ctx.match?.trim().split(" ")
+      if (!args || args.length < 3) {
+        await ctx.reply("❌ Usage: /send [order_id] [amount] [transaction_hash]")
+        return
+      }
+
+      const orderId = args[0]
+      const amount = args[1]
+      const txHash = args[2]
+
+      const order = transactions.get(orderId)
+      if (!order) {
+        await ctx.reply("❌ Order not found.")
+        return
+      }
+
+      if (order.assignedStaff !== userId && !isSuperAdmin(userId)) {
+        await ctx.reply("❌ You can only handle orders assigned to you.")
+        return
+      }
+
+      // Update order
+      order.sentAmount = amount
+      order.sentTxHash = txHash
+      order.updatedAt = new Date().toISOString()
+      transactions.set(orderId, order)
+
+      await ctx.reply(`✅ Tokens sent to customer for order #${orderId}`)
+
+      // Notify customer
+      await bot.api.sendMessage(
+        order.userId,
+        `🎉 TOKENS SENT!\n\n` +
+          `We have sent ${amount} ${order.symbol || order.coin} to your wallet.\n\n` +
+          `📋 Transaction Hash: \`${txHash}\`\n\n` +
+          `✅ You can verify this transaction on BSCScan.\n\n` +
+          `Thank you for using Vintage & Crap Coin Store!`,
+        { parse_mode: "Markdown" },
+      )
+
+      console.log(`🎉 Tokens sent for order ${orderId}`)
+    } catch (error) {
+      console.error("Error in send command:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
     }
   })
@@ -735,9 +838,10 @@ async function setupBot() {
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `✅ ORDER COMPLETED\n\n` +
-          `Your order #${orderId} has been successfully completed!\n\n` +
-          `Thank you for using our service. Type /start to create a new order.`,
+        `✅ TRANSACTION COMPLETED\n\n` +
+          `Your ${order.type} transaction for ${order.amount} ${order.symbol || order.coin} has been successfully completed!\n\n` +
+          `🎉 Thank you for shopping at Vintage & Crap Coin Store!\n\n` +
+          `Type /start to make another transaction.`,
       )
 
       console.log(`✅ Order ${orderId} completed by staff ${getStaffInfo(userId)}`)
@@ -790,9 +894,10 @@ async function setupBot() {
       // Notify customer
       await bot.api.sendMessage(
         order.userId,
-        `❌ ORDER CANCELLED\n\n` +
-          `Your order #${orderId} has been cancelled.\n\n` +
-          `If you have any questions, please contact our support team. Type /start to create a new order.`,
+        `❌ TRANSACTION CANCELLED\n\n` +
+          `Your transaction #${orderId} has been cancelled.\n\n` +
+          `If you have any questions, please contact our support team.\n\n` +
+          `Type /start to create a new transaction.`,
       )
 
       console.log(`❌ Order ${orderId} cancelled by staff ${getStaffInfo(userId)}`)
@@ -844,8 +949,8 @@ async function setupBot() {
         await bot.api.sendMessage(
           newAdminId,
           `🎉 ADMIN ACCESS GRANTED\n\n` +
-            `You have been granted admin access to the Crypto Exchange Bot.\n\n` +
-            `Type /start to access the admin panel.`,
+            `You have been granted admin access to Vintage & Crap Coin Store.\n\n` +
+            `Type /start to access the customer service panel.`,
         )
       } catch (error) {
         console.log("Could not notify new admin (they may need to start the bot first)")
@@ -863,7 +968,7 @@ async function setupBot() {
     try {
       const userId = ctx.from?.id
       if (!userId || !isAdmin(userId)) {
-        await ctx.reply("❌ Only admins can add customer care representatives.")
+        await ctx.reply("❌ Only admins can add customer service representatives.")
         return
       }
 
@@ -888,23 +993,23 @@ async function setupBot() {
         addedAt: new Date().toISOString(),
       })
 
-      await ctx.reply(`✅ ${repName} has been added as a customer care representative.`)
+      await ctx.reply(`✅ ${repName} has been added as a customer service representative.`)
 
       // Notify new rep
       try {
         await bot.api.sendMessage(
           repId,
-          `🎉 CUSTOMER CARE ACCESS GRANTED\n\n` +
-            `You have been granted customer care access to the Crypto Exchange Bot.\n\n` +
+          `🎉 CUSTOMER SERVICE ACCESS GRANTED\n\n` +
+            `You have been granted shop keeper access to Vintage & Crap Coin Store.\n\n` +
             `Type /start to access the staff panel.`,
         )
       } catch (error) {
         console.log("Could not notify new rep (they may need to start the bot first)")
       }
 
-      console.log(`👥 New customer care rep added: ${repName} (${repId})`)
+      console.log(`👥 New customer service rep added: ${repName} (${repId})`)
     } catch (error) {
-      console.error("Error adding customer care rep:", error)
+      console.error("Error adding customer service rep:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
     }
   })
@@ -922,8 +1027,9 @@ async function setupBot() {
       const messageText = ctx.message?.text
       if (!messageText) return
 
-      // Handle custom contract address input
       const session = userSessions.get(userId) || {}
+
+      // Handle custom contract address input
       if (session.step === "custom_contract") {
         const contractAddress = messageText.trim()
 
@@ -931,8 +1037,8 @@ async function setupBot() {
           await ctx.reply(
             "❌ Invalid Contract Address\n\n" +
               "Please provide a valid Ethereum contract address.\n\n" +
-              "Format: 0x followed by 40 hexadecimal characters\n" +
-              "Example: 0x1234567890abcdef1234567890abcdef12345678",
+              "📝 Format: 0x followed by 40 hexadecimal characters\n" +
+              "📝 Example: 0x1234567890abcdef1234567890abcdef12345678",
           )
           return
         }
@@ -940,10 +1046,12 @@ async function setupBot() {
         const knownToken = findTokenByContract(contractAddress)
         let tokenInfo
         let tokenName
+        let tokenSymbol
 
         if (knownToken) {
           tokenInfo = getTokenDisplayInfo(knownToken)
           tokenName = knownToken.name
+          tokenSymbol = knownToken.symbol
         } else {
           tokenInfo =
             `📋 Custom Token Information:\n` +
@@ -952,24 +1060,118 @@ async function setupBot() {
             `📍 Contract: ${contractAddress}\n\n` +
             `⚠️ This is a custom token not in our predefined list.`
           tokenName = `Custom Token (${contractAddress.substring(0, 8)}...)`
+          tokenSymbol = "CUSTOM"
         }
 
         session.coin = tokenName
+        session.symbol = tokenSymbol
         session.contractAddress = contractAddress
-        session.step = "confirm_order"
+        session.step = "enter_amount"
         userSessions.set(userId, session)
+
+        const actionText = session.transactionType === "buy" ? "purchase" : "sell"
+        const amountText = session.transactionType === "buy" ? "How much USD worth" : "How many tokens"
 
         await ctx.reply(
           `${tokenInfo}\n\n` +
-            `📋 ORDER CONFIRMATION\n\n` +
+            `💰 AMOUNT ENTRY\n\n` +
+            `${amountText} of ${tokenSymbol} would you like to ${actionText}?\n\n` +
+            `📝 Please enter the amount:`,
+          {
+            reply_markup: {
+              keyboard: [[{ text: "🔙 Back to Token List" }]],
+              resize_keyboard: true,
+            },
+          },
+        )
+        return
+      }
+
+      // Handle amount input
+      if (session.step === "enter_amount") {
+        const amount = messageText.trim()
+
+        if (!isValidAmount(amount)) {
+          await ctx.reply(
+            "❌ Invalid Amount\n\n" + "Please enter a valid number greater than 0.\n\n" + "📝 Example: 100 or 50.5",
+          )
+          return
+        }
+
+        session.amount = amount
+        session.step = "confirm_transaction"
+        userSessions.set(userId, session)
+
+        const actionText = session.transactionType === "buy" ? "purchase" : "sell"
+        const amountDisplay = session.transactionType === "buy" ? `$${amount} USD worth of` : `${amount}`
+
+        await ctx.reply(
+          `📋 TRANSACTION CONFIRMATION\n\n` +
             `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-            `🪙 Token: ${tokenName}\n\n` +
+            `🪙 Token: ${session.symbol} (${session.coin})\n` +
+            `💰 Amount: ${amountDisplay} ${session.symbol}\n\n` +
             `Is this correct?`,
           {
             reply_markup: {
-              keyboard: [[{ text: "✅ Confirm Order" }, { text: "❌ Cancel Order" }]],
+              keyboard: [[{ text: "✅ Confirm Transaction" }, { text: "❌ Cancel Transaction" }]],
               resize_keyboard: true,
               one_time_keyboard: true,
+            },
+          },
+        )
+        return
+      }
+
+      // Handle transaction hash input
+      if (session.step === "enter_tx_hash") {
+        const txHash = messageText.trim()
+
+        if (!isValidTxHash(txHash)) {
+          await ctx.reply(
+            "❌ Invalid Transaction Hash\n\n" +
+              "Please provide a valid BSC transaction hash.\n\n" +
+              "📝 Format: 0x followed by 64 hexadecimal characters\n" +
+              "📝 Example: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+          )
+          return
+        }
+
+        // Update transaction with hash
+        const order = transactions.get(session.orderId)
+        if (order) {
+          order.customerTxHash = txHash
+          order.status = "payment_sent"
+          order.updatedAt = new Date().toISOString()
+          transactions.set(session.orderId, order)
+
+          // Notify customer service
+          if (order.assignedStaff) {
+            await bot.api.sendMessage(
+              order.assignedStaff,
+              `💳 PAYMENT RECEIVED - Order #${session.orderId}\n\n` +
+                `Customer has provided transaction hash:\n` +
+                `📋 Hash: ${txHash}\n\n` +
+                `Please verify on BSCScan and process the order.\n\n` +
+                `Commands:\n` +
+                `• /send ${session.orderId} [amount] [your_tx_hash] - Send tokens\n` +
+                `• /complete ${session.orderId} - Complete transaction`,
+            )
+          }
+        }
+
+        session.step = "waiting_verification"
+        userSessions.set(userId, session)
+
+        await ctx.reply(
+          "✅ TRANSACTION HASH RECEIVED\n\n" +
+            "Thank you! We have received your transaction hash.\n\n" +
+            "🔄 Our team is now verifying your payment on BSCScan.\n\n" +
+            "⏱️ This usually takes 2-5 minutes.\n\n" +
+            "We will notify you once verification is complete and your tokens are sent.",
+          {
+            reply_markup: {
+              keyboard: [[{ text: "🔙 Back to Menu" }]],
+              resize_keyboard: true,
             },
           },
         )
@@ -994,15 +1196,8 @@ async function setupBot() {
         chatSession.messages.push(message)
         chatSessions.set(session.orderId, chatSession)
 
-        if (chatSession.status === "waiting_for_staff") {
-          await ctx.reply(
-            "📤 Message Sent\n\n" +
-              "Your message has been sent to our support team. Please wait for a response.\n\n" +
-              "💡 Our team typically responds within a few minutes.",
-          )
-        } else if (chatSession.staffId) {
+        if (chatSession.staffId) {
           // Forward to assigned staff
-          const order = transactions.get(session.orderId)
           const userInfo = getUserInfo(ctx)
 
           await bot.api.sendMessage(
@@ -1013,7 +1208,9 @@ async function setupBot() {
               `💡 Reply directly to respond to the customer.`,
           )
 
-          await ctx.reply("📤 Message Sent\n\nYour message has been forwarded to our support team.")
+          await ctx.reply("📤 Message sent to our support team.")
+        } else {
+          await ctx.reply("📤 Message received.\n\n" + "Our team will respond shortly. Please wait for assistance.")
         }
 
         console.log(`💬 Customer message in order ${session.orderId}: ${messageText}`)
@@ -1043,8 +1240,7 @@ async function setupBot() {
             chatSessions.set(chatSession.orderId, chatSession)
 
             // Forward to customer
-            const staffInfo = getStaffInfo(userId)
-            await bot.api.sendMessage(order.userId, `👨‍💼 ${staffInfo}:\n\n${messageText}`)
+            await bot.api.sendMessage(order.userId, `💬 Support Team:\n\n${messageText}`)
 
             await ctx.reply(`📤 Message sent to customer (Order #${chatSession.orderId})`)
             console.log(`💬 Staff message sent to customer in order ${chatSession.orderId}`)
@@ -1069,6 +1265,147 @@ async function setupBot() {
       )
     } catch (error) {
       console.error("Error handling message:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Transaction confirmation handlers
+  bot.hears(["✅ Confirm Transaction", "❌ Cancel Transaction"], async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId) return
+
+      const session = userSessions.get(userId) || {}
+      if (session.step !== "confirm_transaction") {
+        await ctx.reply("Please start over with /start")
+        return
+      }
+
+      if (ctx.message?.text === "❌ Cancel Transaction") {
+        userSessions.set(userId, { step: "main_menu" })
+        await ctx.reply("❌ Transaction Cancelled\n\nWhat would you like to do?", {
+          reply_markup: {
+            keyboard: [
+              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
+              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
+              [{ text: "❓ Help & Support" }],
+            ],
+            resize_keyboard: true,
+          },
+        })
+        return
+      }
+
+      // Create transaction
+      const orderId = generateTransactionId()
+      const order = {
+        id: orderId,
+        userId: userId,
+        type: session.transactionType,
+        coin: session.coin,
+        symbol: session.symbol,
+        amount: session.amount,
+        contractAddress: session.contractAddress,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        assignedStaff: null,
+      }
+
+      transactions.set(orderId, order)
+
+      // Create chat session
+      chatSessions.set(orderId, {
+        orderId: orderId,
+        userId: userId,
+        staffId: null,
+        messages: [],
+        status: "waiting_for_staff",
+      })
+
+      session.orderId = orderId
+      session.step = "chat_with_support"
+      userSessions.set(userId, session)
+
+      const actionText = session.transactionType === "buy" ? "purchase" : "sell"
+      const amountDisplay = session.transactionType === "buy" ? `$${session.amount} USD worth of` : `${session.amount}`
+
+      await ctx.reply(
+        `✅ TRANSACTION CREATED\n\n` +
+          `🆔 Transaction ID: #${orderId}\n` +
+          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
+          `🪙 Token: ${session.symbol} (${session.coin})\n` +
+          `💰 Amount: ${amountDisplay} ${session.symbol}\n\n` +
+          `🔄 Your order is brewing in our vintage shop!\n` +
+          `📋 You've been added to our queue and will be notified.\n\n` +
+          `⏱️ Processing time: 2-10 minutes\n\n` +
+          `💬 Got questions? Chat with our shop keepers anytime!`,
+        {
+          reply_markup: {
+            keyboard: [[{ text: "🔄 New Transaction" }, { text: "📊 My Transactions" }]],
+            resize_keyboard: true,
+          },
+        },
+      )
+
+      // Notify staff members
+      const userInfo = getUserInfo(ctx)
+      const tokenInfo = session.contractAddress ? `\n📍 Contract: ${session.contractAddress}` : ""
+
+      const staffNotification =
+        `🚨 NEW ${session.transactionType?.toUpperCase()} ORDER!\n\n` +
+        `👤 Customer: ${userInfo}\n` +
+        `🪙 Token: ${session.symbol} (${session.coin})\n` +
+        `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n` +
+        `🆔 Order ID: #${orderId}\n\n` +
+        `💼 Use /take ${orderId} to handle this order`
+
+      // Notify admins
+      for (const [adminId, admin] of admins) {
+        try {
+          await bot.api.sendMessage(adminId, staffNotification)
+        } catch (error) {
+          console.error(`Error notifying admin ${adminId}:`, error)
+        }
+      }
+
+      // Notify customer care reps
+      for (const [repId, rep] of customerCareReps) {
+        try {
+          await bot.api.sendMessage(repId, staffNotification)
+        } catch (error) {
+          console.error(`Error notifying rep ${repId}:`, error)
+        }
+      }
+
+      console.log(`✅ Order ${orderId} created for user ${getUserInfo(ctx)}`)
+    } catch (error) {
+      console.error("Error in transaction confirmation:", error)
+      await ctx.reply("❌ Sorry, there was an error processing your transaction. Please try again.")
+    }
+  })
+
+  // New Transaction button
+  bot.hears("🔄 New Transaction", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId) return
+
+      userSessions.set(userId, { step: "main_menu" })
+
+      await ctx.reply("🏪 Browse Our Coin Collection\n\nWhat would you like to do?", {
+        reply_markup: {
+          keyboard: [
+            [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
+            [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
+            [{ text: "❓ Help & Support" }],
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      })
+    } catch (error) {
+      console.error("Error in new transaction:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
     }
   })
@@ -1108,8 +1445,9 @@ async function setupBot() {
       pendingOrders.forEach((order, index) => {
         const user = users.get(order.userId)
         const userInfo = user?.username ? `@${user.username}` : user?.first_name || "Unknown"
+        const amountDisplay = order.type === "buy" ? `$${order.amount} USD worth of` : `${order.amount}`
 
-        ordersList += `${index + 1}. ${order.type.toUpperCase()} ${order.coin}\n`
+        ordersList += `${index + 1}. ${order.type.toUpperCase()} ${amountDisplay} ${order.symbol}\n`
         ordersList += `   👤 Customer: ${userInfo}\n`
         ordersList += `   🆔 Order ID: #${order.id}\n`
         ordersList += `   📅 Created: ${new Date(order.createdAt).toLocaleString()}\n`
@@ -1166,7 +1504,7 @@ async function setupBot() {
         chatsList += `${index + 1}. Order #${chat.orderId}\n`
         chatsList += `   👤 Customer: ${userInfo}\n`
         chatsList += `   👨‍💼 Staff: ${staff}\n`
-        chatsList += `   🪙 Token: ${order?.coin || "Unknown"}\n`
+        chatsList += `   🪙 Token: ${order?.amount} ${order?.symbol || order?.coin || "Unknown"}\n`
         chatsList += `   💬 Messages: ${chat.messages.length}\n\n`
       })
 
@@ -1195,6 +1533,235 @@ async function setupBot() {
     }
   })
 
+  // Manage Staff (Super Admin only)
+  bot.hears("👥 Manage Staff", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !isSuperAdmin(userId)) {
+        await ctx.reply("❌ Only super admins can manage staff.")
+        return
+      }
+
+      let staffList = "👥 STAFF MANAGEMENT\n\n"
+
+      // List all admins
+      if (admins.size > 0) {
+        staffList += "👑 ADMINS:\n"
+        for (const [adminId, admin] of admins) {
+          staffList += `• ${admin.name} (${admin.role}) - ID: ${adminId}\n`
+        }
+        staffList += "\n"
+      }
+
+      // List all customer care reps
+      if (customerCareReps.size > 0) {
+        staffList += "👥 CUSTOMER SERVICE:\n"
+        for (const [repId, rep] of customerCareReps) {
+          staffList += `• ${rep.name} - ID: ${repId}\n`
+        }
+        staffList += "\n"
+      }
+
+      staffList += "Commands:\n"
+      staffList += "• /addadmin [user_id] [name] - Add new admin\n"
+      staffList += "• /addcare [user_id] [name] - Add customer service rep\n"
+      staffList += "• /removestaff [user_id] - Remove staff member"
+
+      await ctx.reply(staffList, {
+        reply_markup: {
+          keyboard: [[{ text: "🔙 Back to Panel" }]],
+          resize_keyboard: true,
+        },
+      })
+    } catch (error) {
+      console.error("Error in manage staff:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Statistics (Super Admin only)
+  bot.hears("📊 Statistics", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !isSuperAdmin(userId)) {
+        await ctx.reply("❌ Only super admins can view statistics.")
+        return
+      }
+
+      const totalUsers = users.size
+      const totalTransactions = transactions.size
+      const pendingOrders = Array.from(transactions.values()).filter((t) => t.status === "pending").length
+      const completedOrders = Array.from(transactions.values()).filter((t) => t.status === "completed").length
+      const cancelledOrders = Array.from(transactions.values()).filter((t) => t.status === "cancelled").length
+      const activeChats = Array.from(chatSessions.values()).filter((c) => c.status === "active").length
+      const totalAdmins = admins.size
+      const totalCustomerCare = customerCareReps.size
+
+      // Get today's transactions
+      const today = new Date().toDateString()
+      const todayTransactions = Array.from(transactions.values()).filter(
+        (t) => new Date(t.createdAt).toDateString() === today,
+      ).length
+
+      let statsText = "📊 VINTAGE & CRAP COIN STORE STATISTICS\n\n"
+      statsText += "👥 USERS & STAFF:\n"
+      statsText += `• Total Users: ${totalUsers}\n`
+      statsText += `• Total Admins: ${totalAdmins}\n`
+      statsText += `• Customer Service Reps: ${totalCustomerCare}\n\n`
+
+      statsText += "📋 TRANSACTIONS:\n"
+      statsText += `• Total Transactions: ${totalTransactions}\n`
+      statsText += `• Today's Transactions: ${todayTransactions}\n`
+      statsText += `• Pending: ${pendingOrders}\n`
+      statsText += `• Completed: ${completedOrders}\n`
+      statsText += `• Cancelled: ${cancelledOrders}\n\n`
+
+      statsText += "💬 CHATS:\n"
+      statsText += `• Active Chats: ${activeChats}\n`
+      statsText += `• Total Chat Sessions: ${chatSessions.size}\n\n`
+
+      statsText += `📅 Last Updated: ${new Date().toLocaleString()}`
+
+      await ctx.reply(statsText, {
+        reply_markup: {
+          keyboard: [[{ text: "🔙 Back to Panel" }]],
+          resize_keyboard: true,
+        },
+      })
+    } catch (error) {
+      console.error("Error in statistics:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // CS Help
+  bot.hears("❓ CS Help", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !canHandleCustomers(userId)) return
+
+      let helpText = "❓ CUSTOMER SERVICE HELP\n\n"
+
+      helpText += "📋 ORDER MANAGEMENT:\n"
+      helpText += "• /take [order_id] - Take control of an order\n"
+      helpText += "• /wallet [order_id] [address] - Send wallet address (for sells)\n"
+      helpText += "• /payment [order_id] [address] - Send payment address (for buys)\n"
+      helpText += "• /send [order_id] [amount] [hash] - Send tokens with tx hash\n"
+      helpText += "• /complete [order_id] - Complete transaction\n"
+      helpText += "• /cancel [order_id] - Cancel transaction\n\n"
+
+      helpText += "💬 CHAT SYSTEM:\n"
+      helpText += "• Type messages to chat with customers\n"
+      helpText += "• Messages are automatically forwarded\n"
+      helpText += "• Only one active chat per staff member\n\n"
+
+      helpText += "🔄 WORKFLOW:\n"
+      helpText += "BUY Orders:\n"
+      helpText += "1. /take [order_id]\n"
+      helpText += "2. /payment [order_id] [payment_address]\n"
+      helpText += "3. Customer pays and provides tx hash\n"
+      helpText += "4. Verify payment on BSCScan\n"
+      helpText += "5. /send [order_id] [amount] [your_tx_hash]\n"
+      helpText += "6. /complete [order_id]\n\n"
+
+      helpText += "SELL Orders:\n"
+      helpText += "1. /take [order_id]\n"
+      helpText += "2. /wallet [order_id] [receiving_address]\n"
+      helpText += "3. Customer sends tokens and provides tx hash\n"
+      helpText += "4. Verify tokens received on BSCScan\n"
+      helpText += "5. Send payment to customer\n"
+      helpText += "6. /complete [order_id]\n\n"
+
+      if (isSuperAdmin(userId)) {
+        helpText += "👑 SUPER ADMIN COMMANDS:\n"
+        helpText += "• /addadmin [user_id] [name] - Add new admin\n"
+        helpText += "• /addcare [user_id] [name] - Add customer service rep\n"
+        helpText += "• /removestaff [user_id] - Remove staff member\n"
+        helpText += "• Manage Staff - View all staff members\n"
+        helpText += "• Statistics - View bot statistics\n"
+      } else if (isAdmin(userId)) {
+        helpText += "👨‍💼 ADMIN COMMANDS:\n"
+        helpText += "• /addcare [user_id] [name] - Add customer service rep\n"
+      }
+
+      helpText += "\n💡 TIPS:\n"
+      helpText += "• Use /start to return to CS panel\n"
+      helpText += "• Get user IDs from @userinfobot\n"
+      helpText += "• Always verify transactions on BSCScan\n"
+      helpText += "• Complete or cancel orders when done"
+
+      await ctx.reply(helpText, {
+        reply_markup: {
+          keyboard: [[{ text: "🔙 Back to Panel" }]],
+          resize_keyboard: true,
+        },
+      })
+    } catch (error) {
+      console.error("Error in CS help:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
+  // Remove staff command (Super Admin only)
+  bot.command("removestaff", async (ctx) => {
+    try {
+      const userId = ctx.from?.id
+      if (!userId || !isSuperAdmin(userId)) {
+        await ctx.reply("❌ Only super admins can remove staff members.")
+        return
+      }
+
+      const staffId = ctx.match?.trim()
+      if (!staffId) {
+        await ctx.reply("❌ Please provide a user ID: /removestaff [user_id]")
+        return
+      }
+
+      // Check if user is an admin
+      if (admins.has(staffId)) {
+        const admin = admins.get(staffId)
+        if (admin.role === "super_admin") {
+          await ctx.reply("❌ Cannot remove super admin.")
+          return
+        }
+        admins.delete(staffId)
+        await ctx.reply(`✅ Admin ${admin.name} has been removed.`)
+
+        // Notify removed admin
+        try {
+          await bot.api.sendMessage(staffId, "❌ Your admin access has been revoked.")
+        } catch (error) {
+          console.log("Could not notify removed admin")
+        }
+
+        console.log(`❌ Admin removed: ${admin.name} (${staffId})`)
+        return
+      }
+
+      // Check if user is customer care
+      if (customerCareReps.has(staffId)) {
+        const rep = customerCareReps.get(staffId)
+        customerCareReps.delete(staffId)
+        await ctx.reply(`✅ Customer service representative ${rep.name} has been removed.`)
+
+        // Notify removed rep
+        try {
+          await bot.api.sendMessage(staffId, "❌ Your customer service access has been revoked.")
+        } catch (error) {
+          console.log("Could not notify removed rep")
+        }
+
+        console.log(`❌ Customer service rep removed: ${rep.name} (${staffId})`)
+        return
+      }
+
+      await ctx.reply("❌ User not found in staff list.")
+    } catch (error) {
+      console.error("Error removing staff:", error)
+      await ctx.reply("❌ Sorry, there was an error. Please try again.")
+    }
+  })
+
   // Help command
   bot.command("help", async (ctx) => {
     try {
@@ -1202,40 +1769,41 @@ async function setupBot() {
       if (!userId) return
 
       if (canHandleCustomers(userId)) {
-        let helpText = "👨‍💼 STAFF HELP\n\n"
+        let helpText = "👨‍💼 CUSTOMER SERVICE HELP\n\n"
         helpText += "Order Management:\n"
         helpText += "• /take [order_id] - Take an order\n"
+        helpText += "• /wallet [order_id] [address] - Send wallet address\n"
+        helpText += "• /payment [order_id] [address] - Send payment address\n"
+        helpText += "• /send [order_id] [amount] [hash] - Send tokens\n"
         helpText += "• /complete [order_id] - Complete order\n"
         helpText += "• /cancel [order_id] - Cancel order\n\n"
-        helpText += "Chat:\n"
-        helpText += "• Type messages to chat with customers\n"
-        helpText += "• Messages are automatically forwarded\n\n"
 
         if (isSuperAdmin(userId)) {
           helpText += "Super Admin:\n"
           helpText += "• /addadmin [user_id] [name] - Add admin\n"
-          helpText += "• /addcare [user_id] [name] - Add customer care\n\n"
+          helpText += "• /addcare [user_id] [name] - Add customer service\n\n"
         } else if (isAdmin(userId)) {
           helpText += "Admin:\n"
-          helpText += "• /addcare [user_id] [name] - Add customer care\n\n"
+          helpText += "• /addcare [user_id] [name] - Add customer service\n\n"
         }
 
-        helpText += "Use /start to access the admin panel."
+        helpText += "Use /start to access the CS panel."
 
         await ctx.reply(helpText)
       } else {
         const helpText =
           "❓ HELP & SUPPORT\n\n" +
-          "How to use this bot:\n" +
+          "How to shop at Vintage & Crap Coin Store:\n" +
           "1️⃣ Select Buy or Sell\n" +
           "2️⃣ Choose your cryptocurrency\n" +
-          "3️⃣ Confirm your order\n" +
-          "4️⃣ Chat with our support team\n\n" +
+          "3️⃣ Enter the amount\n" +
+          "4️⃣ Confirm your transaction\n" +
+          "5️⃣ Follow payment instructions\n\n" +
           "Available Commands:\n" +
           "• /start - Main menu\n" +
           "• /help - Show this help\n\n" +
           "Need assistance?\n" +
-          "Our customer care team is available 24/7!"
+          "Our customer service team is available 24/7!"
 
         await ctx.reply(helpText)
       }
@@ -1250,7 +1818,7 @@ async function setupBot() {
     console.error("❌ Bot error:", err)
   })
 
-  console.log("✅ Crypto Trading Bot initialized successfully with all features!")
+  console.log("✅ CryptoExchange Pro Bot initialized successfully!")
   console.log("👑 Super Admin IDs:", Array.from(SUPER_ADMIN_IDS))
 }
 
@@ -1262,22 +1830,22 @@ setupBot().catch((err) => {
 // Express routes
 app.get("/", (req, res) => {
   res.json({
-    status: "🤖 Crypto Trading Bot is running",
+    status: "🚀 CryptoExchange Pro is running",
     timestamp: new Date().toISOString(),
     hasToken: !!process.env.TELEGRAM_BOT_TOKEN,
     features: [
-      "✅ Buy/Sell Crypto Orders",
-      "✅ Admin Panel System",
-      "✅ Customer Care Management",
-      "✅ Separate Chat Sessions",
-      "✅ Order Tracking",
-      "✅ Staff Management",
+      "✅ Buy/Sell Crypto with Amount Entry",
+      "✅ Professional Customer Service System",
+      "✅ BSC Transaction Verification",
+      "✅ Wallet & Payment Address Management",
+      "✅ Transaction Hash Tracking",
+      "✅ Real-time Chat Support",
     ],
     stats: {
-      totalOrders: transactions.size,
+      totalTransactions: transactions.size,
       activeChats: Array.from(chatSessions.values()).filter((c) => c.status === "active").length,
       totalAdmins: admins.size,
-      totalCustomerCare: customerCareReps.size,
+      totalCustomerService: customerCareReps.size,
     },
   })
 })
@@ -1295,7 +1863,7 @@ app.post("/webhook", async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`🚀 Crypto Trading Bot server running on port ${PORT}`)
-  console.log("🤖 Bot is ready with complete admin system!")
+  console.log(`🚀 CryptoExchange Pro server running on port ${PORT}`)
+  console.log("💎 Professional crypto exchange bot is ready!")
   console.log("📊 Visit the URL to see bot statistics")
 })

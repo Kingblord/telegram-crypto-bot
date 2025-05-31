@@ -844,13 +844,17 @@ async function setupBot() {
 
         let transactionList = "📊 YOUR RECENT TRANSACTIONS\n\n"
 
+        const transactionButtons = []
+
         sortedDocs.forEach((doc, index) => {
           const tx = doc.data()
           const statusEmoji =
             {
               pending: "⏳ Processing",
               waiting_payment: "💳 Awaiting Payment",
+              waiting_tokens: "📤 Awaiting Tokens",
               payment_sent: "🔄 Payment Verification",
+              tokens_sent: "✅ Tokens Sent",
               in_progress: "🔄 Processing",
               completed: "✅ Completed",
               cancelled: "❌ Cancelled",
@@ -859,14 +863,19 @@ async function setupBot() {
           const amountDisplay = tx.type === "buy" ? `$${tx.amount} USD worth of` : `${tx.amount}`
 
           transactionList += `${index + 1}. ${tx.type.toUpperCase()} ${amountDisplay} ${tx.symbol}\n`
-          transactionList += `   🆔 Transaction ID: #${tx.id}\n`
+          transactionList += `   🆔 ID: #${tx.id}\n`
           transactionList += `   📊 Status: ${statusEmoji}\n`
           transactionList += `   📅 Date: ${tx.createdAt?.toDate?.()?.toLocaleDateString() || "Unknown"}\n\n`
+
+          // Add button for each transaction
+          transactionButtons.push([{ text: `📋 Manage #${tx.id}` }])
         })
+
+        transactionButtons.push([{ text: "🔄 Refresh" }, { text: "🔙 Back to Menu" }])
 
         await ctx.reply(transactionList, {
           reply_markup: {
-            keyboard: [[{ text: "🔙 Back to Menu" }]],
+            keyboard: transactionButtons,
             resize_keyboard: true,
           },
         })
@@ -876,944 +885,285 @@ async function setupBot() {
       }
     })
 
-    bot.hears("❓ Help & Support", async (ctx) => {
+    // Transaction Management Handlers
+    bot.hears(/^📋 Manage #/, async (ctx) => {
       try {
-        const helpText =
-          "❓ HELP & SUPPORT\n\n" +
-          "🔹 How to Buy Crypto:\n" +
-          "1️⃣ Select 'Buy Crypto'\n" +
-          "2️⃣ Choose your token\n" +
-          "3️⃣ Enter amount to buy\n" +
-          "4️⃣ Make payment to provided address\n" +
-          "5️⃣ Submit transaction hash\n" +
-          "6️⃣ Receive your tokens\n\n" +
-          "🔹 How to Sell Crypto:\n" +
-          "1️⃣ Select 'Sell Crypto'\n" +
-          "2️⃣ Choose your token\n" +
-          "3️⃣ Enter amount to sell\n" +
-          "4️⃣ Send tokens to provided address\n" +
-          "5️⃣ Receive payment confirmation\n\n" +
-          "🔹 Security:\n" +
-          "• All transactions are verified on BSC\n" +
-          "• Never share private keys\n" +
-          "• Double-check all addresses\n\n" +
-          "🔹 Support:\n" +
-          "Our team is available 24/7 to assist you!"
+        const userId = ctx.from?.id
+        if (!userId) return
 
-        await ctx.reply(helpText, {
+        const messageText = ctx.message?.text || ""
+        const orderId = messageText.replace("📋 Manage #", "")
+
+        // Get transaction details
+        const transactionDoc = await db.collection("transactions").doc(orderId).get()
+        if (!transactionDoc.exists) {
+          await ctx.reply("❌ Transaction not found.")
+          return
+        }
+
+        const transaction = transactionDoc.data()
+        if (transaction.userId !== userId) {
+          await ctx.reply("❌ You can only view your own transactions.")
+          return
+        }
+
+        const amountDisplay =
+          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
+        const statusEmoji =
+          {
+            pending: "⏳ Processing",
+            waiting_payment: "💳 Awaiting Payment",
+            waiting_tokens: "📤 Awaiting Tokens",
+            payment_sent: "🔄 Payment Verification",
+            tokens_sent: "✅ Tokens Sent",
+            in_progress: "🔄 Processing",
+            completed: "✅ Completed",
+            cancelled: "❌ Cancelled",
+          }[transaction.status] || "❓ Unknown"
+
+        let detailsText = `📋 TRANSACTION DETAILS\n\n`
+        detailsText += `🆔 Order ID: #${orderId}\n`
+        detailsText += `🔄 Action: ${transaction.type.toUpperCase()}\n`
+        detailsText += `🪙 Token: ${transaction.symbol} (${transaction.coin})\n`
+        detailsText += `💰 Amount: ${amountDisplay} ${transaction.symbol}\n`
+        detailsText += `📊 Status: ${statusEmoji}\n`
+        detailsText += `📅 Created: ${transaction.createdAt?.toDate?.()?.toLocaleString() || "Unknown"}\n`
+
+        if (transaction.contractAddress) {
+          detailsText += `📍 Contract: ${transaction.contractAddress}\n`
+        }
+
+        if (transaction.paymentAddress) {
+          detailsText += `💳 Payment Address: ${transaction.paymentAddress}\n`
+        }
+
+        if (transaction.receivingAddress) {
+          detailsText += `📤 Receiving Address: ${transaction.receivingAddress}\n`
+        }
+
+        if (transaction.customerTxHash) {
+          detailsText += `📝 Your TX Hash: ${transaction.customerTxHash}\n`
+        }
+
+        if (transaction.sentTxHash) {
+          detailsText += `✅ Sent TX Hash: ${transaction.sentTxHash}\n`
+        }
+
+        if (transaction.assignedStaff) {
+          const staffInfo = await getStaffInfo(transaction.assignedStaff)
+          detailsText += `👨‍💼 Assigned Staff: ${staffInfo}\n`
+        }
+
+        // Create action buttons based on status
+        const actionButtons = []
+
+        if (transaction.status === "waiting_payment" && transaction.paymentAddress) {
+          actionButtons.push([{ text: "📝 Submit Payment Hash" }])
+        }
+
+        if (transaction.status === "waiting_tokens" && transaction.receivingAddress) {
+          actionButtons.push([{ text: "📝 Submit Transaction Hash" }])
+        }
+
+        if (["in_progress", "payment_sent", "tokens_sent"].includes(transaction.status)) {
+          actionButtons.push([{ text: "💬 Chat with Support" }])
+        }
+
+        actionButtons.push([{ text: "🔄 Refresh Status" }])
+        actionButtons.push([{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }])
+
+        // Store current transaction in session for follow-up actions
+        const session = await getUserSession(userId)
+        session.currentTransactionId = orderId
+        await setUserSession(userId, session)
+
+        await ctx.reply(detailsText, {
           reply_markup: {
-            keyboard: [[{ text: "🔙 Back to Menu" }]],
+            keyboard: actionButtons,
             resize_keyboard: true,
           },
         })
       } catch (error) {
-        console.error("Error showing help:", error)
+        console.error("Error showing transaction details:", error)
         await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 
-    bot.hears("🔙 Back to Menu", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        // Check if staff member
-        if (await canHandleCustomers(userId)) {
-          await showAdminPanel(ctx)
-          return
-        }
-
-        await setUserSession(userId, { step: "main_menu" })
-
-        await ctx.reply("🏪 Welcome back to Vintage & Crap Coin Store!\n\nReady for more crypto adventures?", {
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          },
-        })
-      } catch (error) {
-        console.error("Error going back to menu:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.hears("🔍 Custom Token (Contract Address)", async (ctx) => {
+    bot.hears("📝 Submit Payment Hash", async (ctx) => {
       try {
         const userId = ctx.from?.id
         if (!userId) return
 
         const session = await getUserSession(userId)
-        if (session.step !== "select_token") {
-          await ctx.reply("Please start over with /start")
+        if (!session.currentTransactionId) {
+          await ctx.reply("❌ No transaction selected. Please go back to your transactions.")
           return
         }
 
-        session.step = "custom_contract"
+        session.step = "enter_payment_hash"
         await setUserSession(userId, session)
 
         await ctx.reply(
-          "🔍 CUSTOM TOKEN SEARCH\n\n" +
-            "Please send the contract address of the token you want to trade.\n\n" +
-            "📝 Example:\n" +
-            "0x1234567890abcdef1234567890abcdef12345678\n\n" +
-            "⚠️ Make sure the address is correct!",
-          {
-            reply_markup: {
-              keyboard: [[{ text: "🔙 Back to Token List" }]],
-              resize_keyboard: true,
-            },
-          },
-        )
-      } catch (error) {
-        console.error("Error in custom token search:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.hears("🔙 Back to Token List", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        const session = await getUserSession(userId)
-        if (session.step !== "custom_contract") {
-          await ctx.reply("Please start over with /start")
-          return
-        }
-
-        session.step = "select_token"
-        await setUserSession(userId, session)
-
-        const tokenButtons = AVAILABLE_TOKENS.map((token) => [{ text: `${token.symbol} - ${token.name}` }])
-        tokenButtons.push([{ text: "🔍 Custom Token (Contract Address)" }])
-        tokenButtons.push([{ text: "🔙 Back to Menu" }])
-
-        const actionText = session.transactionType === "buy" ? "purchase" : "sell"
-        await ctx.reply(
-          `💼 ${session.transactionType?.toUpperCase()} CRYPTOCURRENCY\n\n` +
-            `Select the token you want to ${actionText}:`,
-          {
-            reply_markup: {
-              keyboard: tokenButtons,
-              resize_keyboard: true,
-              one_time_keyboard: true,
-            },
-          },
-        )
-      } catch (error) {
-        console.error("Error going back to token list:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.hears("✅ I Have Paid", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        const session = await getUserSession(userId)
-        if (session.step !== "payment_sent") {
-          await ctx.reply("Please start over with /start")
-          return
-        }
-
-        session.step = "enter_tx_hash"
-        await setUserSession(userId, session)
-
-        await ctx.reply(
-          "📝 TRANSACTION HASH REQUIRED\n\n" +
-            "Please provide your transaction hash for verification.\n\n" +
+          "📝 SUBMIT PAYMENT HASH\n\n" +
+            "Please provide your payment transaction hash for verification.\n\n" +
             "📋 Example:\n" +
             "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\n\n" +
             "⚠️ Make sure the hash is correct!",
           {
             reply_markup: {
-              keyboard: [[{ text: "🔙 Back to Menu" }]],
+              keyboard: [[{ text: "📊 Back to Transactions" }]],
               resize_keyboard: true,
             },
           },
         )
       } catch (error) {
-        console.error("Error in paid button:", error)
+        console.error("Error in submit payment hash:", error)
         await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 
-    bot.hears("🔄 New Transaction", async (ctx) => {
+    bot.hears("📝 Submit Transaction Hash", async (ctx) => {
       try {
         const userId = ctx.from?.id
         if (!userId) return
-
-        await setUserSession(userId, { step: "main_menu" })
-
-        await ctx.reply("🏪 Browse Our Coin Collection\n\nWhat would you like to do?", {
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          },
-        })
-      } catch (error) {
-        console.error("Error in new transaction:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // ===========================================
-    // COMMANDS
-    // ===========================================
-
-    // Start command
-    bot.command("start", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        // Check if user is staff
-        if (await canHandleCustomers(userId)) {
-          await showAdminPanel(ctx)
-          return
-        }
-
-        // Reset user session
-        await setUserSession(userId, { step: "start" })
-
-        // Save user info to Firestore
-        const user = ctx.from
-        await db
-          .collection("users")
-          .doc(userId.toString())
-          .set(
-            {
-              id: userId,
-              username: user.username || null,
-              first_name: user.first_name || null,
-              last_name: user.last_name || null,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          )
-
-        await ctx.reply(
-          "🏪 Welcome to Vintage & Crap Coin Store!\n\n" +
-            "Your quirky shop for all things crypto - from vintage gems to the latest crap coins! 💎💩\n\n" +
-            "🔥 Fast • Fun • Reliable\n\n" +
-            "What would you like to do today?",
-          {
-            reply_markup: {
-              keyboard: [
-                [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-                [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-                [{ text: "❓ Help & Support" }],
-              ],
-              resize_keyboard: true,
-              one_time_keyboard: true,
-            },
-          },
-        )
-
-        await setUserSession(userId, { step: "main_menu" })
-        console.log(`✅ User ${getUserInfo(ctx)} started the bot`)
-      } catch (error) {
-        console.error("Error in start command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // Admin Commands
-    bot.command("take", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /take [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.status !== "pending") {
-          await ctx.reply("❌ This order is not available for assignment.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "in_progress",
-          assignedStaff: userId,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          staffId: userId,
-          status: "active",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const staffInfo = await getStaffInfo(userId)
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `✅ ORDER ASSIGNED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `🪙 Token: ${transaction.symbol} (${transaction.coin})\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n` +
-            `👤 Customer ID: ${transaction.userId}\n\n` +
-            `💬 You can now chat with the customer. All messages will be forwarded.\n\n` +
-            `Next steps:\n` +
-            `• For BUY orders: /payment ${orderId} [payment_address]\n` +
-            `• For SELL orders: /wallet ${orderId} [receiving_address]`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `👨‍💼 ${staffInfo} has been assigned to your order #${orderId}!\n\n` +
-            `They will assist you with your ${transaction.type} of ${amountDisplay} ${transaction.symbol}.\n\n` +
-            `💬 You can chat here and your messages will be forwarded to them.`,
-        )
-
-        console.log(`✅ Order ${orderId} assigned to staff ${staffInfo}`)
-      } catch (error) {
-        console.error("Error in take command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("payment", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /payment [order_id] [payment_address]")
-          return
-        }
-
-        const orderId = args[0]
-        const paymentAddress = args.slice(1).join(" ")
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        if (transaction.type !== "buy") {
-          await ctx.reply("❌ This command is only for BUY orders.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "waiting_payment",
-          paymentAddress: paymentAddress,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const amountDisplay = `$${transaction.amount} USD worth of`
-
-        await ctx.reply(
-          `✅ PAYMENT ADDRESS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n` +
-            `📍 Payment Address: ${paymentAddress}\n\n` +
-            `Customer has been notified. Waiting for payment...`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `💳 PAYMENT REQUIRED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount to pay: ${amountDisplay} ${transaction.symbol}\n` +
-            `📍 Send payment to: \`${paymentAddress}\`\n\n` +
-            `⚠️ Please send the exact amount to the address above.\n` +
-            `📝 After payment, provide your transaction hash for verification.`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Payment address sent for order ${orderId}`)
-      } catch (error) {
-        console.error("Error in payment command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("wallet", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /wallet [order_id] [receiving_address]")
-          return
-        }
-
-        const orderId = args[0]
-        const receivingAddress = args.slice(1).join(" ")
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        if (transaction.type !== "sell") {
-          await ctx.reply("❌ This command is only for SELL orders.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "waiting_tokens",
-          receivingAddress: receivingAddress,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ RECEIVING ADDRESS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount: ${transaction.amount} ${transaction.symbol}\n` +
-            `📍 Receiving Address: ${receivingAddress}\n\n` +
-            `Customer has been notified. Waiting for tokens...`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `📤 SEND YOUR TOKENS\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount to send: ${transaction.amount} ${transaction.symbol}\n` +
-            `📍 Send tokens to: \`${receivingAddress}\`\n\n` +
-            `⚠️ Please send the exact amount to the address above.\n` +
-            `📝 After sending, provide your transaction hash for verification.`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Receiving address sent for order ${orderId}`)
-      } catch (error) {
-        console.error("Error in wallet command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("send", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 3) {
-          await ctx.reply("❌ Usage: /send [order_id] [amount] [transaction_hash]")
-          return
-        }
-
-        const orderId = args[0]
-        const amount = args[1]
-        const txHash = args[2]
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "tokens_sent",
-          sentAmount: amount,
-          sentTxHash: txHash,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ TOKENS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount sent: ${amount} ${transaction.symbol}\n` +
-            `📝 Transaction Hash: ${txHash}\n\n` +
-            `Customer has been notified. Use /complete ${orderId} to finish the order.`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `✅ TOKENS RECEIVED!\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount: ${amount} ${transaction.symbol}\n` +
-            `📝 Transaction Hash: \`${txHash}\`\n\n` +
-            `🎉 Your tokens have been sent! Please check your wallet.\n` +
-            `🔍 Verify on BSCScan: https://bscscan.com/tx/${txHash}`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Tokens sent for order ${orderId}`)
-      } catch (error) {
-        console.error("Error in send command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("complete", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /complete [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "completed",
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          status: "completed",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `✅ ORDER COMPLETED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `🎉 Transaction successfully completed!`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `🎉 TRANSACTION COMPLETED!\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `✅ Your transaction has been successfully completed!\n` +
-            `🙏 Thank you for using Vintage & Crap Coin Store!\n\n` +
-            `💬 Type /start to make another transaction.`,
-        )
-
-        console.log(`✅ Order ${orderId} completed by staff ${await getStaffInfo(userId)}`)
-      } catch (error) {
-        console.error("Error in complete command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("cancel", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /cancel [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "cancelled",
-          cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          status: "cancelled",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `❌ ORDER CANCELLED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `Order has been cancelled.`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `❌ TRANSACTION CANCELLED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `Your transaction has been cancelled.\n` +
-            `💬 Type /start to make a new transaction.`,
-        )
-
-        console.log(`❌ Order ${orderId} cancelled by staff ${await getStaffInfo(userId)}`)
-      } catch (error) {
-        console.error("Error in cancel command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // Staff Management Commands
-    bot.command("addadmin", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can add new admins.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /addadmin [user_id] [name]")
-          return
-        }
-
-        const newAdminId = args[0]
-        const adminName = args.slice(1).join(" ")
-
-        // Add to Firestore
-        await db.collection("admins").doc(newAdminId).set({
-          id: newAdminId,
-          role: "admin",
-          name: adminName,
-          addedBy: userId,
-          addedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ ADMIN ADDED\n\n` +
-            `👤 Name: ${adminName}\n` +
-            `🆔 User ID: ${newAdminId}\n` +
-            `👑 Role: Admin\n\n` +
-            `They can now manage orders and customer service.`,
-        )
-
-        // Notify new admin
-        try {
-          await bot.api.sendMessage(
-            newAdminId,
-            `🎉 WELCOME TO THE TEAM!\n\n` +
-              `You have been added as an Admin for Vintage & Crap Coin Store!\n\n` +
-              `🏪 You can now:\n` +
-              `• Manage customer orders\n` +
-              `• Handle customer support\n` +
-              `• Add customer service reps\n\n` +
-              `💬 Type /start to access the admin panel.`,
-          )
-        } catch (error) {
-          console.log(`Could not notify new admin ${newAdminId}`)
-        }
-
-        console.log(`✅ Admin ${adminName} (${newAdminId}) added by ${userId}`)
-      } catch (error) {
-        console.error("Error in addadmin command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("addcare", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await isAdmin(userId))) {
-          await ctx.reply("❌ Only admins can add customer service representatives.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /addcare [user_id] [name]")
-          return
-        }
-
-        const newCareId = args[0]
-        const careName = args.slice(1).join(" ")
-
-        // Add to Firestore
-        await db.collection("customerCare").doc(newCareId).set({
-          id: newCareId,
-          name: careName,
-          addedBy: userId,
-          addedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ CUSTOMER SERVICE REP ADDED\n\n` +
-            `👤 Name: ${careName}\n` +
-            `🆔 User ID: ${newCareId}\n` +
-            `👥 Role: Customer Service\n\n` +
-            `They can now handle customer orders and support.`,
-        )
-
-        // Notify new customer service rep
-        try {
-          await bot.api.sendMessage(
-            newCareId,
-            `🎉 WELCOME TO THE TEAM!\n\n` +
-              `You have been added as a Customer Service Representative for Vintage & Crap Coin Store!\n\n` +
-              `🏪 You can now:\n` +
-              `• Handle customer orders\n` +
-              `• Provide customer support\n` +
-              `• Process transactions\n\n` +
-              `💬 Type /start to access the customer service panel.`,
-          )
-        } catch (error) {
-          console.log(`Could not notify new customer service rep ${newCareId}`)
-        }
-
-        console.log(`✅ Customer service rep ${careName} (${newCareId}) added by ${userId}`)
-      } catch (error) {
-        console.error("Error in addcare command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("removestaff", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can remove staff members.")
-          return
-        }
-
-        const staffId = ctx.match?.trim()
-        if (!staffId) {
-          await ctx.reply("❌ Usage: /removestaff [user_id]")
-          return
-        }
-
-        if (isSuperAdmin(staffId)) {
-          await ctx.reply("❌ Cannot remove super admin.")
-          return
-        }
-
-        // Check if admin
-        const adminDoc = await db.collection("admins").doc(staffId).get()
-        if (adminDoc.exists) {
-          await db.collection("admins").doc(staffId).delete()
-          const admin = adminDoc.data()
-          await ctx.reply(`✅ Admin ${admin.name} (${staffId}) has been removed.`)
-          console.log(`✅ Admin ${admin.name} (${staffId}) removed by ${userId}`)
-          return
-        }
-
-        // Check if customer care
-        const careDoc = await db.collection("customerCare").doc(staffId).get()
-        if (careDoc.exists) {
-          await db.collection("customerCare").doc(staffId).delete()
-          const care = careDoc.data()
-          await ctx.reply(`✅ Customer service rep ${care.name} (${staffId}) has been removed.`)
-          console.log(`✅ Customer service rep ${care.name} (${staffId}) removed by ${userId}`)
-          return
-        }
-
-        await ctx.reply("❌ Staff member not found.")
-      } catch (error) {
-        console.error("Error in removestaff command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // ===========================================
-    // TEXT MESSAGE HANDLER (MUST COME LAST)
-    // ===========================================
-
-    bot.on("message:text", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        const messageText = ctx.message?.text
-        if (!userId || !messageText) return
 
         const session = await getUserSession(userId)
-
-        // Handle amount entry
-        if (session.step === "enter_amount") {
-          if (!isValidAmount(messageText)) {
-            await ctx.reply(
-              "❌ Invalid amount. Please enter a valid number.\n\n" + "📝 Example: 100 (for $100 USD or 100 tokens)",
-            )
-            return
-          }
-
-          session.amount = messageText
-          session.step = "confirm_transaction"
-          await setUserSession(userId, session)
-
-          const amountDisplay =
-            session.transactionType === "buy" ? `$${session.amount} USD worth of` : `${session.amount}`
-          const tokenInfo = session.contractAddress ? `\n📍 Contract: ${session.contractAddress}` : ""
-
-          await ctx.reply(
-            `📋 TRANSACTION CONFIRMATION\n\n` +
-              `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-              `🪙 Token: ${session.symbol} (${session.coin})\n` +
-              `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n\n` +
-              `⚠️ Please review your transaction details carefully.\n\n` +
-              `Do you want to proceed?`,
-            {
-              reply_markup: {
-                keyboard: [[{ text: "✅ Confirm Transaction" }, { text: "❌ Cancel Transaction" }]],
-                resize_keyboard: true,
-                one_time_keyboard: true,
-              },
-            },
-          )
+        if (!session.currentTransactionId) {
+          await ctx.reply("❌ No transaction selected. Please go back to your transactions.")
           return
         }
 
-        // Handle custom contract address entry
-        if (session.step === "custom_contract") {
-          if (!isValidContractAddress(messageText)) {
-            await ctx.reply(
-              "❌ Invalid contract address format!\n\n" +
-                "Please provide a valid Ethereum contract address starting with 0x followed by 40 hexadecimal characters.\n\n" +
-                "📝 Example: 0x1234567890abcdef1234567890abcdef12345678",
-            )
-            return
-          }
+        session.step = "enter_token_hash"
+        await setUserSession(userId, session)
 
-          // Check if it's a known token
-          const knownToken = findTokenByContract(messageText)
-
-          let tokenInfo
-          let tokenName
-          let tokenSymbol
-
-          if (knownToken) {
-            tokenInfo = getTokenDisplayInfo(knownToken)
-            tokenName = knownToken.name
-            tokenSymbol = knownToken.symbol
-          } else {
-            tokenInfo = `📋 Custom Token Information:
-🏷️ Name: Unknown Token
-🔤 Symbol: Unknown
-📍 Contract: ${messageText}
-
-⚠️ This is a custom token not in our predefined list.`
-            tokenName = `Custom Token (${messageText.substring(0, 8)}...)`
-            tokenSymbol = "CUSTOM"
-          }
-
-          session.coin = tokenName
-          session.symbol = tokenSymbol
-          session.contractAddress = messageText
-          session.step = "enter_amount"
-          await setUserSession(userId, session)
-
-          const actionText = session.transactionType === "buy" ? "purchase" : "sell"
-          const amountText = session.transactionType === "buy" ? "How much USD worth" : "How many tokens"
-
-          await ctx.reply(
-            `${tokenInfo}\n\n` +
-              `💰 AMOUNT ENTRY\n\n` +
-              `${amountText} of this token would you like to ${actionText}?\n\n` +
-              `📝 Please enter the amount:`,
-            {
-              reply_markup: {
-                keyboard: [[{ text: "🔙 Back to Token List" }]],
-                resize_keyboard: true,
-              },
+        await ctx.reply(
+          "📝 SUBMIT TRANSACTION HASH\n\n" +
+            "Please provide your token sending transaction hash for verification.\n\n" +
+            "📋 Example:\n" +
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\n\n" +
+            "⚠️ Make sure the hash is correct!",
+          {
+            reply_markup: {
+              keyboard: [[{ text: "📊 Back to Transactions" }]],
+              resize_keyboard: true,
             },
-          )
+          },
+        )
+      } catch (error) {
+        console.error("Error in submit transaction hash:", error)
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+      }
+    })
+
+    bot.hears("💬 Chat with Support", async (ctx) => {
+      try {
+        const userId = ctx.from?.id
+        if (!userId) return
+
+        const session = await getUserSession(userId)
+        if (!session.currentTransactionId) {
+          await ctx.reply("❌ No transaction selected. Please go back to your transactions.")
           return
         }
 
-        // Handle transaction hash entry
-        if (session.step === "enter_tx_hash") {
+        session.step = "chat_with_support"
+        session.orderId = session.currentTransactionId
+        await setUserSession(userId, session)
+
+        await ctx.reply(
+          "💬 CHAT WITH SUPPORT\n\n" +
+            `You are now connected to support for order #${session.currentTransactionId}.\n\n` +
+            "Type your message and it will be forwarded to our support team.\n\n" +
+            "💡 You can ask questions about your order status, payment, or any issues.",
+          {
+            reply_markup: {
+              keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
+              resize_keyboard: true,
+            },
+          },
+        )
+      } catch (error) {
+        console.error("Error in chat with support:", error)
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+      }
+    })
+
+    bot.hears("🔄 Refresh Status", async (ctx) => {
+      try {
+        const userId = ctx.from?.id
+        if (!userId) return
+
+        const session = await getUserSession(userId)
+        if (!session.currentTransactionId) {
+          await ctx.reply("❌ No transaction selected. Please go back to your transactions.")
+          return
+        }
+
+        // Trigger the manage transaction handler again to refresh
+        ctx.message.text = `📋 Manage #${session.currentTransactionId}`
+        // Re-trigger the manage handler
+        const manageHandler = bot.handlers.find((h) => h.trigger && h.trigger.test && h.trigger.test("📋 Manage #"))
+        if (manageHandler) {
+          await manageHandler.middleware(ctx)
+        }
+      } catch (error) {
+        console.error("Error refreshing status:", error)
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+      }
+    })
+
+    bot.hears("🔄 Refresh", async (ctx) => {
+      try {
+        const userId = ctx.from?.id
+        if (!userId) return
+
+        // Re-trigger the transactions list
+        ctx.message.text = "📊 My Transactions"
+        // Find and execute the My Transactions handler
+        const transactionsHandler = bot.handlers.find((h) => h.trigger === "📊 My Transactions")
+        if (transactionsHandler) {
+          await transactionsHandler.middleware(ctx)
+        }
+      } catch (error) {
+        console.error("Error refreshing transactions:", error)
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+      }
+    })
+
+    bot.hears("📊 Back to Transactions", async (ctx) => {
+      try {
+        const userId = ctx.from?.id
+        if (!userId) return
+
+        // Clear current transaction from session
+        const session = await getUserSession(userId)
+        delete session.currentTransactionId
+        session.step = "main_menu"
+        await setUserSession(userId, session)
+
+        // Re-trigger the transactions list
+        ctx.message.text = "📊 My Transactions"
+        // Find and execute the My Transactions handler
+        const transactionsHandler = bot.handlers.find((h) => h.trigger === "📊 My Transactions")
+        if (transactionsHandler) {
+          await transactionsHandler.middleware(ctx)
+        }
+      } catch (error) {
+        console.error("Error going back to transactions:", error)
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+      }
+    })
+
+    // Handle payment hash entry
+    bot.on("message", async (ctx) => {
+      try {
+        const userId = ctx.from?.id
+        if (!userId) return
+
+        const messageText = ctx.message?.text || ""
+        const session = await getUserSession(userId)
+
+        if (session.step === "enter_payment_hash") {
           if (!isValidTxHash(messageText)) {
             await ctx.reply(
               "❌ Invalid transaction hash format!\n\n" +
@@ -1824,45 +1174,101 @@ async function setupBot() {
           }
 
           // Update transaction with hash
-          if (session.orderId) {
-            await db.collection("transactions").doc(session.orderId).update({
+          if (session.currentTransactionId) {
+            await db.collection("transactions").doc(session.currentTransactionId).update({
               customerTxHash: messageText,
               status: "payment_sent",
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             })
 
             // Notify staff
-            const transactionDoc = await db.collection("transactions").doc(session.orderId).get()
+            const transactionDoc = await db.collection("transactions").doc(session.currentTransactionId).get()
             const transaction = transactionDoc.data()
 
             if (transaction && transaction.assignedStaff) {
               await bot.api.sendMessage(
                 transaction.assignedStaff,
-                `💳 PAYMENT RECEIVED!\n\n` +
-                  `🆔 Order ID: #${session.orderId}\n` +
+                `💳 PAYMENT HASH RECEIVED!\n\n` +
+                  `🆔 Order ID: #${session.currentTransactionId}\n` +
                   `📝 Transaction Hash: ${messageText}\n` +
                   `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
                   `Please verify the payment and proceed with the order.`,
               )
             }
+
+            // Notify customer
+            await ctx.reply(
+              `✅ PAYMENT HASH SUBMITTED\n\n` +
+                `📝 Hash: ${messageText}\n` +
+                `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
+                `Your payment hash has been submitted and our team is verifying it.\n\n` +
+                `You'll be notified once the payment is confirmed.`,
+              {
+                reply_markup: {
+                  keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
+                  resize_keyboard: true,
+                },
+              },
+            )
+
+            session.step = "main_menu"
+            await setUserSession(userId, session)
+          }
+          return
+        }
+
+        // Handle token hash entry
+        if (session.step === "enter_token_hash") {
+          if (!isValidTxHash(messageText)) {
+            await ctx.reply(
+              "❌ Invalid transaction hash format!\n\n" +
+                "Please provide a valid transaction hash starting with 0x followed by 64 hexadecimal characters.\n\n" +
+                "📝 Example: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            )
+            return
           }
 
-          session.step = "chat_with_support"
-          await setUserSession(userId, session)
+          // Update transaction with hash
+          if (session.currentTransactionId) {
+            await db.collection("transactions").doc(session.currentTransactionId).update({
+              customerTxHash: messageText,
+              status: "tokens_sent",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            })
 
-          await ctx.reply(
-            `✅ TRANSACTION HASH RECEIVED\n\n` +
-              `📝 Hash: ${messageText}\n` +
-              `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
-              `Our team is verifying your payment. You'll be notified once confirmed.\n\n` +
-              `💬 You can continue chatting here for any questions.`,
-            {
-              reply_markup: {
-                keyboard: [[{ text: "🔄 New Transaction" }, { text: "📊 My Transactions" }]],
-                resize_keyboard: true,
+            // Notify staff
+            const transactionDoc = await db.collection("transactions").doc(session.currentTransactionId).get()
+            const transaction = transactionDoc.data()
+
+            if (transaction && transaction.assignedStaff) {
+              await bot.api.sendMessage(
+                transaction.assignedStaff,
+                `📤 TOKENS HASH RECEIVED!\n\n` +
+                  `🆔 Order ID: #${session.currentTransactionId}\n` +
+                  `📝 Transaction Hash: ${messageText}\n` +
+                  `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
+                  `Please verify the tokens received and proceed with payment.`,
+              )
+            }
+
+            // Notify customer
+            await ctx.reply(
+              `✅ TRANSACTION HASH SUBMITTED\n\n` +
+                `📝 Hash: ${messageText}\n` +
+                `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
+                `Your transaction hash has been submitted and our team is verifying it.\n\n` +
+                `You'll receive payment once the tokens are confirmed.`,
+              {
+                reply_markup: {
+                  keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
+                  resize_keyboard: true,
+                },
               },
-            },
-          )
+            )
+
+            session.step = "main_menu"
+            await setUserSession(userId, session)
+          }
           return
         }
 

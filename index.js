@@ -1018,7 +1018,7 @@ async function setupBot() {
   // MESSAGE HANDLING
   // ===========================================
 
-  // Handle regular text messages
+  // Handle custom contract address input
   bot.on("message:text", async (ctx) => {
     try {
       const userId = ctx.from?.id
@@ -1029,7 +1029,7 @@ async function setupBot() {
 
       const session = userSessions.get(userId) || {}
 
-      // Handle custom contract address input
+      // Only handle specific steps, let bot.hears() handle button presses
       if (session.step === "custom_contract") {
         const contractAddress = messageText.trim()
 
@@ -1037,7 +1037,7 @@ async function setupBot() {
           await ctx.reply(
             "❌ Invalid Contract Address\n\n" +
               "Please provide a valid Ethereum contract address.\n\n" +
-              "📝 Format: 0x followed by 40 hexadecimal characters\n" +
+              "📝 Format: 0x followed by 40 hexadecimal characters\n\n" +
               "📝 Example: 0x1234567890abcdef1234567890abcdef12345678",
           )
           return
@@ -1054,9 +1054,9 @@ async function setupBot() {
           tokenSymbol = knownToken.symbol
         } else {
           tokenInfo =
-            `📋 Custom Token Information:\n` +
-            `🏷️ Name: Unknown Token\n` +
-            `🔤 Symbol: Unknown\n` +
+            `📋 Custom Token Information:\n\n` +
+            `🏷️ Name: Unknown Token\n\n` +
+            `🔤 Symbol: Unknown\n\n` +
             `📍 Contract: ${contractAddress}\n\n` +
             `⚠️ This is a custom token not in our predefined list.`
           tokenName = `Custom Token (${contractAddress.substring(0, 8)}...)`
@@ -1107,8 +1107,8 @@ async function setupBot() {
 
         await ctx.reply(
           `📋 TRANSACTION CONFIRMATION\n\n` +
-            `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-            `🪙 Token: ${session.symbol} (${session.coin})\n` +
+            `🔄 Action: ${session.transactionType?.toUpperCase()}\n\n` +
+            `🪙 Token: ${session.symbol} (${session.coin})\n\n` +
             `💰 Amount: ${amountDisplay} ${session.symbol}\n\n` +
             `Is this correct?`,
           {
@@ -1130,7 +1130,7 @@ async function setupBot() {
           await ctx.reply(
             "❌ Invalid Transaction Hash\n\n" +
               "Please provide a valid BSC transaction hash.\n\n" +
-              "📝 Format: 0x followed by 64 hexadecimal characters\n" +
+              "📝 Format: 0x followed by 64 hexadecimal characters\n\n" +
               "📝 Example: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
           )
           return
@@ -1149,11 +1149,11 @@ async function setupBot() {
             await bot.api.sendMessage(
               order.assignedStaff,
               `💳 PAYMENT RECEIVED - Order #${session.orderId}\n\n` +
-                `Customer has provided transaction hash:\n` +
+                `Customer has provided transaction hash:\n\n` +
                 `📋 Hash: ${txHash}\n\n` +
                 `Please verify on BSCScan and process the order.\n\n` +
-                `Commands:\n` +
-                `• /send ${session.orderId} [amount] [your_tx_hash] - Send tokens\n` +
+                `Commands:\n\n` +
+                `• /send ${session.orderId} [amount] [your_tx_hash] - Send tokens\n\n` +
                 `• /complete ${session.orderId} - Complete transaction`,
             )
           }
@@ -1202,7 +1202,7 @@ async function setupBot() {
 
           await bot.api.sendMessage(
             chatSession.staffId,
-            `💬 Customer Message (Order #${session.orderId})\n` +
+            `💬 Customer Message (Order #${session.orderId})\n\n` +
               `👤 From: ${userInfo}\n\n` +
               `"${messageText}"\n\n` +
               `💡 Reply directly to respond to the customer.`,
@@ -1258,11 +1258,8 @@ async function setupBot() {
         return
       }
 
-      // Default response for unrecognized messages
-      await ctx.reply(
-        "❓ I didn't understand that command.\n\n" +
-          "Please use /start to access the main menu or use the buttons provided.",
-      )
+      // Only show "didn't understand" for unrecognized text input, not button presses
+      console.log(`Unrecognized message: "${messageText}" from user ${userId}`)
     } catch (error) {
       console.error("Error handling message:", error)
       await ctx.reply("❌ Sorry, there was an error. Please try again.")
@@ -1332,11 +1329,11 @@ async function setupBot() {
 
       await ctx.reply(
         `✅ TRANSACTION CREATED\n\n` +
-          `🆔 Transaction ID: #${orderId}\n` +
-          `🔄 Action: ${session.transactionType?.toUpperCase()}\n` +
-          `🪙 Token: ${session.symbol} (${session.coin})\n` +
+          `🆔 Transaction ID: #${orderId}\n\n` +
+          `🔄 Action: ${session.transactionType?.toUpperCase()}\n\n` +
+          `🪙 Token: ${session.symbol} (${session.coin})\n\n` +
           `💰 Amount: ${amountDisplay} ${session.symbol}\n\n` +
-          `🔄 Your order is brewing in our vintage shop!\n` +
+          `🔄 Your order is brewing in our vintage shop!\n\n` +
           `📋 You've been added to our queue and will be notified.\n\n` +
           `⏱️ Processing time: 2-10 minutes\n\n` +
           `💬 Got questions? Chat with our shop keepers anytime!`,
@@ -1354,9 +1351,9 @@ async function setupBot() {
 
       const staffNotification =
         `🚨 NEW ${session.transactionType?.toUpperCase()} ORDER!\n\n` +
-        `👤 Customer: ${userInfo}\n` +
-        `🪙 Token: ${session.symbol} (${session.coin})\n` +
-        `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n` +
+        `👤 Customer: ${userInfo}\n\n` +
+        `🪙 Token: ${session.symbol} (${session.coin})\n\n` +
+        `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n\n` +
         `🆔 Order ID: #${orderId}\n\n` +
         `💼 Use /take ${orderId} to handle this order`
 
@@ -1416,7 +1413,6 @@ async function setupBot() {
 
   // View Orders
   bot.hears("📋 View Orders", async (ctx) => {
-    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return
@@ -1469,7 +1465,6 @@ async function setupBot() {
 
   // Active Chats
   bot.hears("💬 Active Chats", async (ctx) => {
-    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return
@@ -1537,7 +1532,6 @@ async function setupBot() {
 
   // Manage Staff (Super Admin only)
   bot.hears("👥 Manage Staff", async (ctx) => {
-    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !isSuperAdmin(userId)) {
@@ -1584,7 +1578,6 @@ async function setupBot() {
 
   // Statistics (Super Admin only)
   bot.hears("📊 Statistics", async (ctx) => {
-    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !isSuperAdmin(userId)) {
@@ -1640,7 +1633,6 @@ async function setupBot() {
 
   // CS Help
   bot.hears("❓ CS Help", async (ctx) => {
-    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return

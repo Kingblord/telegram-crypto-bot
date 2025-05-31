@@ -7,14 +7,29 @@ app.use(express.json())
 // Create bot instance
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN)
 
-// Start command
-bot.command("start", async (ctx) => {
-  await ctx.reply("🤖 Hello! I'm your crypto bot. I'm working on Render!")
-})
+// Initialize bot before handling updates
+async function setupBot() {
+  // Initialize the bot
+  await bot.init()
 
-// Echo messages
-bot.on("message:text", async (ctx) => {
-  await ctx.reply(`You said: ${ctx.message.text}`)
+  // Start command
+  bot.command("start", async (ctx) => {
+    console.log("Start command received")
+    await ctx.reply("🤖 Hello! I'm your crypto bot. I'm working on Render!")
+  })
+
+  // Echo messages
+  bot.on("message:text", async (ctx) => {
+    console.log("Text message received:", ctx.message.text)
+    await ctx.reply(`You said: ${ctx.message.text}`)
+  })
+
+  console.log("Bot initialized successfully!")
+}
+
+// Call setup function
+setupBot().catch((err) => {
+  console.error("Error setting up bot:", err)
 })
 
 // Express routes
@@ -28,7 +43,7 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("Received webhook:", req.body)
+    console.log("Received webhook:", JSON.stringify(req.body))
     await bot.handleUpdate(req.body)
     res.status(200).json({ ok: true })
   } catch (error) {

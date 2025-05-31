@@ -1416,6 +1416,7 @@ async function setupBot() {
 
   // View Orders
   bot.hears("📋 View Orders", async (ctx) => {
+    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return
@@ -1468,6 +1469,7 @@ async function setupBot() {
 
   // Active Chats
   bot.hears("💬 Active Chats", async (ctx) => {
+    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return
@@ -1535,6 +1537,7 @@ async function setupBot() {
 
   // Manage Staff (Super Admin only)
   bot.hears("👥 Manage Staff", async (ctx) => {
+    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !isSuperAdmin(userId)) {
@@ -1581,6 +1584,7 @@ async function setupBot() {
 
   // Statistics (Super Admin only)
   bot.hears("📊 Statistics", async (ctx) => {
+    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !isSuperAdmin(userId)) {
@@ -1636,6 +1640,7 @@ async function setupBot() {
 
   // CS Help
   bot.hears("❓ CS Help", async (ctx) => {
+    console.log(`Admin button pressed: ${ctx.message?.text}`)
     try {
       const userId = ctx.from?.id
       if (!userId || !canHandleCustomers(userId)) return
@@ -1818,7 +1823,7 @@ async function setupBot() {
     console.error("❌ Bot error:", err)
   })
 
-  console.log("✅ CryptoExchange Pro Bot initialized successfully!")
+  console.log("✅ Vintage & Crap Coin Store Bot initialized successfully!")
   console.log("👑 Super Admin IDs:", Array.from(SUPER_ADMIN_IDS))
 }
 
@@ -1830,7 +1835,7 @@ setupBot().catch((err) => {
 // Express routes
 app.get("/", (req, res) => {
   res.json({
-    status: "🚀 CryptoExchange Pro is running",
+    status: "🏪 Vintage & Crap Coin Store is running",
     timestamp: new Date().toISOString(),
     hasToken: !!process.env.TELEGRAM_BOT_TOKEN,
     features: [
@@ -1863,7 +1868,7 @@ app.post("/webhook", async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`🚀 CryptoExchange Pro server running on port ${PORT}`)
-  console.log("💎 Professional crypto exchange bot is ready!")
+  console.log(`🚀 Vintage & Crap Coin Store server running on port ${PORT}`)
+  console.log("🏪 Vintage & Crap Coin Store is ready for business!")
   console.log("📊 Visit the URL to see bot statistics")
 })

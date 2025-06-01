@@ -242,7 +242,7 @@ async function showAdminPanel(ctx) {
 
     const keyboard = [[{ text: "📋 View Orders" }, { text: "💬 Active Chats" }]]
 
-    if (isSuperAdmin(userId)) {
+    if (await isAdmin(userId)) {
       keyboard.push([{ text: "👥 Manage Staff" }, { text: "📊 Statistics" }])
     }
 
@@ -525,8 +525,8 @@ async function setupBot() {
     bot.hears("👥 Manage Staff", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can manage staff.")
+        if (!userId || !(await isAdmin(userId))) {
+          await ctx.reply("❌ Only admins can manage staff.")
           return
         }
 
@@ -582,8 +582,8 @@ async function setupBot() {
     bot.hears("📊 Statistics", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can view statistics.")
+        if (!userId || !(await isAdmin(userId))) {
+          await ctx.reply("❌ Only admins can view statistics.")
           return
         }
 
@@ -690,8 +690,8 @@ async function setupBot() {
         helpText += "5. Send payment to customer\n"
         helpText += "6. /complete [order_id]\n\n"
 
-        if (isSuperAdmin(userId)) {
-          helpText += "👑 SUPER ADMIN COMMANDS:\n"
+        if (await isAdmin(userId)) {
+          helpText += "👑 ADMIN COMMANDS:\n"
           helpText += "• /addadmin [user_id] [name] - Add new admin\n"
           helpText += "• /addcare [user_id] [name] - Add customer service rep\n"
           helpText += "• /removestaff [user_id] - Remove staff member\n"
@@ -2052,8 +2052,8 @@ async function setupBot() {
     bot.command("addadmin", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can add new admins.")
+        if (!userId || !(await isAdmin(userId))) {
+          await ctx.reply("❌ Only admins can add new admins.")
           return
         }
 
@@ -2175,14 +2175,20 @@ async function setupBot() {
     bot.command("removestaff", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !isSuperAdmin(userId)) {
-          await ctx.reply("❌ Only super admins can remove staff members.")
+        if (!userId || !(await isAdmin(userId))) {
+          await ctx.reply("❌ Only admins can remove staff members.")
           return
         }
 
         const staffId = ctx.match?.trim()
         if (!staffId) {
           await ctx.reply("❌ Usage: /removestaff [user_id]")
+          return
+        }
+
+        // Prevent removing the original super admin
+        if (isSuperAdmin(staffId)) {
+          await ctx.reply("❌ Cannot remove super admin.")
           return
         }
 

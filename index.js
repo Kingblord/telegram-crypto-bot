@@ -34,7 +34,7 @@ const AVAILABLE_TOKENS = [
 ]
 
 // SUPER ADMIN IDs (Replace with your actual Telegram user ID from @userinfobot)
-const SUPER_ADMIN_IDS = new Set(["7763673217"]) // Add your ID here
+const SUPER_ADMIN_IDS = new Set(["7763673217", "7751641080"]) // Replace YOUR_SECOND_ADMIN_ID with actual ID
 
 // Bot-like names for staff
 const BOT_NAMES = [

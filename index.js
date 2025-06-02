@@ -34,7 +34,7 @@ const AVAILABLE_TOKENS = [
 ]
 
 // SUPER ADMIN IDs (Replace with your actual Telegram user ID from @userinfobot)
-const SUPER_ADMIN_IDS = new Set(["7763673217", "7751641080"]) // Replace YOUR_SECOND_ADMIN_ID with actual ID
+const SUPER_ADMIN_IDS = new Set(["7763673217", "7477411555"]) // Replace YOUR_SECOND_ADMIN_ID with actual ID
 
 // Bot-like names for staff
 const BOT_NAMES = [
@@ -103,8 +103,8 @@ function generateBotName() {
 // Firestore helper functions
 async function isAdmin(userId) {
   try {
-    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
-    return adminDoc.exists
+    const userRole = await getUserRoleFromFirestore(userId)
+    return userRole && (userRole.type === "admin" || userRole.type === "super_admin")
   } catch (error) {
     console.error("Error checking admin status:", error)
     return false
@@ -116,21 +116,14 @@ async function canHandleCustomers(userId) {
   try {
     if (!userId) return false
 
-    // Check admin status
-    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
-    if (adminDoc.exists) {
-      console.log(`User ${userId} is an admin`)
+    const userRole = await getUserRoleFromFirestore(userId)
+
+    if (userRole) {
+      console.log(`User ${userId} has role: ${userRole.type}`)
       return true
     }
 
-    // Check customer care status
-    const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
-    if (careDoc.exists) {
-      console.log(`User ${userId} is customer care`)
-      return true
-    }
-
-    console.log(`User ${userId} is not staff`)
+    console.log(`User ${userId} has no staff role`)
     return false
   } catch (error) {
     console.error(`Error checking staff status for ${userId}:`, error)
@@ -148,18 +141,13 @@ async function isCustomerCare(userId) {
   }
 }
 
+// Updated getStaffDisplayName function
 async function getStaffDisplayName(userId) {
   try {
-    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
-    if (adminDoc.exists) {
-      const admin = adminDoc.data()
-      return admin.displayName || admin.name
-    }
+    const userRole = await getUserRoleFromFirestore(userId)
 
-    const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
-    if (careDoc.exists) {
-      const care = careDoc.data()
-      return care.displayName || care.name
+    if (userRole && userRole.data) {
+      return userRole.data.displayName || userRole.data.name || "SupportBot"
     }
 
     return "SupportBot"
@@ -169,18 +157,21 @@ async function getStaffDisplayName(userId) {
   }
 }
 
+// Updated getStaffInfo function
 async function getStaffInfo(userId) {
   try {
-    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
-    if (adminDoc.exists) {
-      const admin = adminDoc.data()
-      return `${admin.name} (${admin.role})`
-    }
+    const userRole = await getUserRoleFromFirestore(userId)
 
-    const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
-    if (careDoc.exists) {
-      const care = careDoc.data()
-      return `${care.name} (Customer Service)`
+    if (userRole && userRole.data) {
+      const name = userRole.data.name || "Staff Member"
+      const roleDisplay =
+        {
+          super_admin: "Super Admin",
+          admin: "Admin",
+          customer_care: "Customer Service",
+        }[userRole.type] || "Staff"
+
+      return `${name} (${roleDisplay})`
     }
 
     return "Staff Member"
@@ -289,6 +280,114 @@ async function showAdminPanel(ctx) {
   } catch (error) {
     console.error("Error showing admin panel:", error)
     await ctx.reply("❌ Sorry, there was an error loading the admin panel.")
+  }
+}
+
+// New function to check user role in Firestore
+async function getUserRoleFromFirestore(userId) {
+  try {
+    if (!userId) return null
+
+    // Check if user is a super admin (hardcoded)
+    if (isSuperAdmin(userId)) {
+      const adminDoc = await db.collection("admins").doc(userId.toString()).get()
+      if (adminDoc.exists) {
+        return {
+          type: "super_admin",
+          data: adminDoc.data(),
+        }
+      }
+    }
+
+    // Check if user is an admin
+    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
+    if (adminDoc.exists) {
+      const adminData = adminDoc.data()
+      return {
+        type: "admin",
+        data: adminData,
+      }
+    }
+
+    // Check if user is customer care
+    const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
+    if (careDoc.exists) {
+      const careData = careDoc.data()
+      return {
+        type: "customer_care",
+        data: careData,
+      }
+    }
+
+    // No role found
+    return null
+  } catch (error) {
+    console.error(`Error checking user role for ${userId}:`, error)
+    return null
+  }
+}
+
+// Enhanced function to show appropriate staff panel based on role
+async function showStaffPanel(ctx, userRole) {
+  try {
+    const userId = ctx.from?.id
+    if (!userId) return
+
+    const roleData = userRole.data
+    const staffDisplayName = roleData.displayName || roleData.name || "StaffBot"
+
+    // Get pending orders count
+    const pendingSnapshot = await db.collection("transactions").where("status", "==", "pending").get()
+
+    // Get active chats count
+    const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
+
+    let panelText = `🏪 STAFF CONTROL PANEL\n\n`
+
+    // Show role-specific welcome message
+    switch (userRole.type) {
+      case "super_admin":
+        panelText += `👑 Welcome Super Admin: ${roleData.name}\n`
+        panelText += `🤖 Your Agent Name: ${staffDisplayName}\n`
+        panelText += `🔑 Access Level: FULL ACCESS\n`
+        break
+      case "admin":
+        panelText += `👨‍💼 Welcome Admin: ${roleData.name}\n`
+        panelText += `🤖 Your Agent Name: ${staffDisplayName}\n`
+        panelText += `🔑 Access Level: ADMIN\n`
+        break
+      case "customer_care":
+        panelText += `👥 Welcome Customer Service: ${roleData.name}\n`
+        panelText += `🤖 Your Agent Name: ${staffDisplayName}\n`
+        panelText += `🔑 Access Level: CUSTOMER SUPPORT\n`
+        break
+    }
+
+    panelText += `📊 Pending Orders: ${pendingSnapshot.size}\n`
+    panelText += `💬 Active Chats: ${activeChatsSnapshot.size}\n\n`
+    panelText += `What would you like to do?`
+
+    // Build keyboard based on role
+    const keyboard = [[{ text: "📋 View Orders" }, { text: "💬 Active Chats" }]]
+
+    // Add admin-only buttons for admins and super admins
+    if (userRole.type === "admin" || userRole.type === "super_admin") {
+      keyboard.push([{ text: "👥 Manage Staff" }, { text: "📊 Statistics" }])
+    }
+
+    keyboard.push([{ text: "❓ CS Help" }])
+
+    await ctx.reply(panelText, {
+      reply_markup: {
+        keyboard: keyboard,
+        resize_keyboard: true,
+      },
+    })
+
+    console.log(`✅ ${userRole.type} panel shown to ${roleData.name} (${userId})`)
+  } catch (error) {
+    console.error("Error showing staff panel:", error)
+    await ctx.reply("❌ Sorry, there was an error loading the staff panel.")
   }
 }
 
@@ -2091,29 +2190,34 @@ async function setupBot() {
       }
     }
 
-    // Modify the start command to be more robust
+    // Modify the start command to check Firestore for user roles
     bot.command("start", async (ctx) => {
       try {
         const userId = ctx.from?.id
         if (!userId) return
 
-        console.log(`User ${userId} started the bot - checking if staff...`)
+        console.log(`User ${userId} started the bot - checking Firestore for role...`)
 
-        // Check if user is staff FIRST - prioritize staff panel
-        const isStaff = await canHandleCustomers(userId)
+        // Check Firestore for user role
+        const userRole = await getUserRoleFromFirestore(userId)
 
-        if (isStaff) {
-          console.log(`✅ Staff member ${userId} detected via /start - showing admin panel`)
+        if (userRole) {
+          console.log(`✅ User ${userId} has role: ${userRole.type} - showing ${userRole.type} panel`)
+
           // Save staff session
           await setUserSession(userId, {
             step: "admin_panel",
             isStaff: true,
+            role: userRole.type,
+            roleData: userRole.data,
           })
-          await showAdminPanel(ctx)
+
+          // Show appropriate staff panel based on role
+          await showStaffPanel(ctx, userRole)
           return
         }
 
-        // Only show user interface if NOT staff
+        // No role found - show regular user interface
         console.log(`Regular user ${userId} detected - showing user interface`)
 
         // Reset user session

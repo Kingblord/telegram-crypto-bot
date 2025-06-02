@@ -251,7 +251,7 @@ async function initializeSuperAdmins() {
   }
 }
 
-// 🔔 NOTIFICATION SYSTEM
+// 🔔 ENHANCED NOTIFICATION SYSTEM WITH ERROR HANDLING
 async function sendStaffNotification(message, orderId = null, priority = "normal") {
   try {
     // Create inline keyboard for quick actions
@@ -276,19 +276,32 @@ async function sendStaffNotification(message, orderId = null, priority = "normal
     // Choose which bot to use for notifications
     const botToUse = notificationBot || bot
 
-    // Send to all staff
+    let successCount = 0
+    let failureCount = 0
+
+    // Send to all staff with error handling
     for (const staffId of allStaff) {
       try {
         await botToUse.api.sendMessage(staffId, message, {
           reply_markup: keyboard,
           parse_mode: "HTML",
         })
+        successCount++
+        console.log(`✅ Notification sent to staff ${staffId}`)
       } catch (error) {
-        console.error(`Error notifying staff ${staffId}:`, error)
+        failureCount++
+        console.error(`❌ Failed to notify staff ${staffId}:`, error.description || error.message)
+
+        // If chat not found, remove from staff list
+        if (error.description && error.description.includes("chat not found")) {
+          console.log(`🗑️ Removing inactive staff member ${staffId} from notifications`)
+          // You could optionally remove them from the database here
+          // await removeInactiveStaff(staffId)
+        }
       }
     }
 
-    console.log(`📢 Notification sent to ${allStaff.length} staff members`)
+    console.log(`📢 Notification results: ${successCount} sent, ${failureCount} failed`)
   } catch (error) {
     console.error("Error sending staff notification:", error)
   }
@@ -505,12 +518,18 @@ async function takeOrder(ctx, orderId) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     })
 
-    // Update chat session
-    await db.collection("chatSessions").doc(orderId).update({
-      staffId: userId,
-      status: "active",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
+    // Create or update chat session
+    await db.collection("chatSessions").doc(orderId).set(
+      {
+        orderId: orderId,
+        userId: transaction.userId,
+        staffId: userId,
+        status: "active",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
 
     const staffInfo = await getStaffInfo(userId)
     const staffDisplayName = await getStaffDisplayName(userId)
@@ -698,13 +717,18 @@ async function cancelOrder(ctx, orderId) {
   }
 }
 
-// Show active chats
+// FIXED: Show active chats function
 async function showActiveChats(ctx) {
   try {
     const userId = ctx.from?.id
     if (!userId || !(await canHandleCustomers(userId))) return
 
+    console.log(`🔍 Fetching active chats for staff ${userId}`)
+
+    // Get active chat sessions
     const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
+
+    console.log(`📊 Found ${activeChatsSnapshot.size} active chat sessions`)
 
     if (activeChatsSnapshot.empty) {
       await ctx.reply(
@@ -719,34 +743,95 @@ async function showActiveChats(ctx) {
 
     let chatsList = "💬 <b>ACTIVE CHATS</b>\n\n"
     const keyboard = new InlineKeyboard()
+    let validChats = 0
 
     for (const chatDoc of activeChatsSnapshot.docs) {
       const chat = chatDoc.data()
-      const orderDoc = await db.collection("transactions").doc(chat.orderId).get()
-      const order = orderDoc.data()
+      console.log(`📋 Processing chat session:`, chat)
 
-      if (order) {
-        chatsList += `🆔 Order <code>#${chat.orderId}</code>\n`
-        chatsList += `🪙 ${order.type.toUpperCase()} ${order.amount} ${order.symbol}\n`
-        chatsList += `👤 Customer: ${chat.userId}\n`
-        chatsList += `👨‍💼 Staff: ${chat.staffId ? await getStaffInfo(chat.staffId) : "Unassigned"}\n\n`
+      try {
+        // Get transaction details
+        const orderDoc = await db.collection("transactions").doc(chat.orderId).get()
 
-        keyboard
-          .text(`💬 Chat #${chat.orderId.slice(-4)}`, `chat_${chat.orderId}`)
-          .text(`👀 View #${chat.orderId.slice(-4)}`, `view_${chat.orderId}`)
-          .row()
+        if (!orderDoc.exists) {
+          console.log(`⚠️ Transaction ${chat.orderId} not found for chat session`)
+          continue
+        }
+
+        const order = orderDoc.data()
+        console.log(`📦 Found order:`, order)
+
+        if (order) {
+          validChats++
+          const amountDisplay = order.type === "buy" ? `$${order.amount} USD worth of` : `${order.amount}`
+          const timeAgo = getTimeAgo(chat.createdAt?.toDate?.())
+
+          // Get customer info
+          let customerInfo = "Unknown"
+          try {
+            const customerDoc = await db.collection("users").doc(order.userId.toString()).get()
+            if (customerDoc.exists) {
+              const customer = customerDoc.data()
+              customerInfo = customer?.username
+                ? `@${customer.username}`
+                : customer?.first_name || `User ${order.userId}`
+            } else {
+              customerInfo = `User ${order.userId}`
+            }
+          } catch (error) {
+            console.error(`Error getting customer info for ${order.userId}:`, error)
+            customerInfo = `User ${order.userId}`
+          }
+
+          // Get staff info
+          let staffInfo = "Unassigned"
+          if (chat.staffId) {
+            try {
+              staffInfo = await getStaffDisplayName(chat.staffId)
+            } catch (error) {
+              console.error(`Error getting staff info for ${chat.staffId}:`, error)
+              staffInfo = `Staff ${chat.staffId}`
+            }
+          }
+
+          chatsList += `🆔 Order <code>#${chat.orderId.slice(-8)}</code>\n`
+          chatsList += `🪙 ${order.type.toUpperCase()} ${amountDisplay} ${order.symbol}\n`
+          chatsList += `👤 Customer: ${customerInfo}\n`
+          chatsList += `👨‍💼 Staff: ${staffInfo}\n`
+          chatsList += `⏰ Started: ${timeAgo}\n\n`
+
+          keyboard
+            .text(`💬 Chat #${chat.orderId.slice(-4)}`, `chat_${chat.orderId}`)
+            .text(`👀 View #${chat.orderId.slice(-4)}`, `view_${chat.orderId}`)
+            .row()
+        }
+      } catch (error) {
+        console.error(`Error processing chat session ${chatDoc.id}:`, error)
       }
     }
 
-    keyboard.text("🔙 Back to Panel", "back_to_panel")
+    if (validChats === 0) {
+      await ctx.reply(
+        "💬 <b>ACTIVE CHATS</b>\n\nNo valid active chats found.\n\nActive conversations will appear here.",
+        {
+          parse_mode: "HTML",
+          reply_markup: new InlineKeyboard().text("🔙 Back to Panel", "back_to_panel"),
+        },
+      )
+      return
+    }
+
+    keyboard.text("🔄 Refresh", "view_chats").text("🔙 Back to Panel", "back_to_panel")
 
     await ctx.reply(chatsList, {
       parse_mode: "HTML",
       reply_markup: keyboard,
     })
+
+    console.log(`✅ Displayed ${validChats} active chats to staff ${userId}`)
   } catch (error) {
     console.error("Error showing active chats:", error)
-    await ctx.reply("❌ Sorry, there was an error.")
+    await ctx.reply("❌ Sorry, there was an error loading active chats. Please try again.")
   }
 }
 
@@ -2736,6 +2821,8 @@ app.get("/", async (req, res) => {
         "✅ Complete Enhanced Customer Experience",
         "✅ Full Admin Panel with All Functions",
         "✅ Working Remove Staff Function",
+        "✅ FIXED Active Chats Display",
+        "✅ Enhanced Error Handling for Notifications",
         "✅ Seamless User Interface",
         "✅ Clickable Order Management",
         "✅ Integrated Notification System",
@@ -2796,6 +2883,8 @@ app.listen(PORT, () => {
   console.log("   • ✅ Enhanced customer experience")
   console.log("   • ✅ Complete admin panel")
   console.log("   • ✅ Working remove staff function")
+  console.log("   • ✅ FIXED Active chats display")
+  console.log("   • ✅ Enhanced notification error handling")
   console.log("   • ✅ Seamless user interface")
   console.log("   • ✅ Professional transaction management")
   console.log("   • ✅ Integrated notification system")

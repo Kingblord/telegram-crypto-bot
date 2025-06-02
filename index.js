@@ -1054,6 +1054,7 @@ async function handleTransactionType(ctx, type) {
 
     const session = await getUserSession(userId)
     session.transactionType = type
+    session.step = "select_token"
     await setUserSession(userId, session)
 
     const tokenButtons = AVAILABLE_TOKENS.map((token) => [{ text: `${token.symbol} - ${token.name}` }])
@@ -1471,7 +1472,7 @@ async function setupBot() {
   try {
     await bot.init()
     await initializeSuperAdmins()
-    
+
     // Setup notification bot if enabled
     await setupNotificationBot()
 
@@ -1507,8 +1508,6 @@ async function setupBot() {
           await completeOrder(ctx, orderId)
         } else if (data.startsWith("cancel_")) {
           const orderId = data.substring(7)
-          await cancelOrder(ctx, orderId)  {
-          const orderId = data.substring(7)
           await cancelOrder(ctx, orderId)
         } else if (data.startsWith("chat_")) {
           const orderId = data.substring(5)
@@ -1521,32 +1520,35 @@ async function setupBot() {
           await showStaffManagement(ctx)
         } else if (data === "view_stats") {
           await showStatistics(ctx)
-        } else if (data === "staff_help") {\
+        } else if (data === "staff_help") {
           await ctx.reply(
             "❓ <b>STAFF HELP GUIDE</b>\n\n" +
-            "🎯 <b>Taking Orders:</b>\n" +
-            "• Click 'View Orders' to see pending orders\n" +
-            "• Click '🎯 Take' button next to any order\n" +
-            "• No need to type order IDs!\n\n" +
-            "💳 <b>Processing Orders:</b>\n" +
-            "• After taking order, use action buttons\n" +
-            "• Click 'Send Payment Address' for buy orders\n" +
-            "• Click 'Send Wallet Address' for sell orders\n" +
-            "• Complete orders when done\n\n" +
-            "💬 <b>Customer Chat:</b>\n" +
-            "• Click 'Chat Customer' to start chatting\n" +
-            "• Type messages normally - they're auto-forwarded\n\n" +
-            "🔔 <b>Notifications:</b>\n" +
-            `• $notificationBot ? "Separate notification bot enabled" : "Notifications in main bot"\n` +
-            "• Quick actions available in notifications\n" +
-            "• Take orders directly from notifications",
+              "🎯 <b>Taking Orders:</b>\n" +
+              "• Click 'View Orders' to see pending orders\n" +
+              "• Click '🎯 Take' button next to any order\n" +
+              "• No need to type order IDs!\n\n" +
+              "💳 <b>Processing Orders:</b>\n" +
+              "• After taking order, use action buttons\n" +
+              "• Click 'Send Payment Address' for buy orders\n" +
+              "• Click 'Send Wallet Address' for sell orders\n" +
+              "• Complete orders when done\n\n" +
+              "💬 <b>Customer Chat:</b>\n" +
+              "• Click 'Chat Customer' to start chatting\n" +
+              "• Type messages normally - they're auto-forwarded\n\n" +
+              "🔔 <b>Notifications:</b>\n" +
+              `• ${notificationBot ? "Separate notification bot enabled" : "Notifications in main bot"}\n` +
+              "• Quick actions available in notifications\n" +
+              "• Take orders directly from notifications",
+            {
               parse_mode: "HTML",
-              reply_markup: new InlineKeyboard().text("🔙 Back to Panel", "back_to_panel")
+              reply_markup: new InlineKeyboard().text("🔙 Back to Panel", "back_to_panel"),
+            },
           )
         }
-      } catch (error) 
+      } catch (error) {
         console.error("Error handling callback:", error)
         await ctx.reply("❌ Sorry, there was an error.")
+      }
     })
 
     // Enhanced payment address handler
@@ -1561,13 +1563,13 @@ async function setupBot() {
 
       await ctx.reply(
         `💳 <b>SEND PAYMENT ADDRESS</b>\n\n` +
-        `Order ID: <code>#${orderId}</code>\n\n` +
-        `Please enter the payment address where the customer should send their payment:\n\n` +
-        `📝 Example: 0x1234567890abcdef1234567890abcdef12345678`,
+          `Order ID: <code>#${orderId}</code>\n\n` +
+          `Please enter the payment address where the customer should send their payment:\n\n` +
+          `📝 Example: 0x1234567890abcdef1234567890abcdef12345678`,
         {
           parse_mode: "HTML",
           reply_markup: new InlineKeyboard().text("❌ Cancel", `view_${orderId}`),
-        }
+        },
       )
     }
 
@@ -1583,13 +1585,13 @@ async function setupBot() {
 
       await ctx.reply(
         `📤 <b>SEND WALLET ADDRESS</b>\n\n` +
-        `Order ID: <code>#${orderId}</code>\n\n` +
-        `Please enter the wallet address where the customer should send their tokens:\n\n` +
-        `📝 Example: 0x1234567890abcdef1234567890abcdef12345678`,
+          `Order ID: <code>#${orderId}</code>\n\n` +
+          `Please enter the wallet address where the customer should send their tokens:\n\n` +
+          `📝 Example: 0x1234567890abcdef1234567890abcdef12345678`,
         {
           parse_mode: "HTML",
           reply_markup: new InlineKeyboard().text("❌ Cancel", `view_${orderId}`),
-        }
+        },
       )
     }
 
@@ -1608,16 +1610,16 @@ async function setupBot() {
 
       await ctx.reply(
         `💬 <b>CHAT WITH CUSTOMER</b>\n\n` +
-        `Order ID: <code>#${orderId}</code>\n` +
-        `Customer ID: ${transaction?.userId}\n\n` +
-        `You are now in chat mode. Type your message and it will be sent to the customer.\n\n` +
-        `💡 Type /endchat to stop chatting.`,
+          `Order ID: <code>#${orderId}</code>\n` +
+          `Customer ID: ${transaction?.userId}\n\n` +
+          `You are now in chat mode. Type your message and it will be sent to the customer.\n\n` +
+          `💡 Type /endchat to stop chatting.`,
         {
           parse_mode: "HTML",
           reply_markup: new InlineKeyboard()
             .text("🔚 End Chat", `view_${orderId}`)
             .text("👀 View Order", `view_${orderId}`),
-        }
+        },
       )
     }
 
@@ -1645,16 +1647,22 @@ async function setupBot() {
 
         // Regular user interface
         console.log(`Regular user ${userId} detected`)
-        
+
         // Save user info to Firestore
         const user = ctx.from
-        await db.collection("users").doc(userId.toString()).set({
-          id: userId,
-          username: user.username || null,
-          first_name: user.first_name || null,
-          last_name: user.last_name || null,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true })
+        await db
+          .collection("users")
+          .doc(userId.toString())
+          .set(
+            {
+              id: userId,
+              username: user.username || null,
+              first_name: user.first_name || null,
+              last_name: user.last_name || null,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
 
         await showCustomerMainMenu(ctx)
         console.log(`✅ Regular user ${getUserInfo(ctx)} started the bot`)
@@ -1716,7 +1724,7 @@ async function setupBot() {
 
       await ctx.reply(
         `💼 <b>${session.transactionType.toUpperCase()} CRYPTOCURRENCY</b>\n\n` +
-        `Select the token you want to ${session.transactionType}:`,
+          `Select the token you want to ${session.transactionType}:`,
         {
           parse_mode: "HTML",
           reply_markup: {
@@ -1724,7 +1732,7 @@ async function setupBot() {
             resize_keyboard: true,
             one_time_keyboard: true,
           },
-        }
+        },
       )
     })
 
@@ -1779,24 +1787,25 @@ async function setupBot() {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         })
 
-        const amountDisplay = session.transactionType === "buy" ? `$${session.amount} USD worth of` : `${session.amount}`
+        const amountDisplay =
+          session.transactionType === "buy" ? `$${session.amount} USD worth of` : `${session.amount}`
 
         await ctx.reply(
           `✅ <b>ORDER CREATED SUCCESSFULLY!</b>\n\n` +
-          `🆔 Transaction ID: <code>#${orderId}</code>\n` +
-          `🔄 Action: <b>${session.transactionType?.toUpperCase()}</b>\n` +
-          `🪙 Token: <b>${session.symbol}</b>\n` +
-          `💰 Amount: <b>${amountDisplay} ${session.symbol}</b>\n\n` +
-          `🔄 Your order is now in our processing queue.\n` +
-          `⏱️ Expected processing time: 2-10 minutes\n\n` +
-          `🤖 An automated agent will be assigned shortly.`,
+            `🆔 Transaction ID: <code>#${orderId}</code>\n` +
+            `🔄 Action: <b>${session.transactionType?.toUpperCase()}</b>\n` +
+            `🪙 Token: <b>${session.symbol}</b>\n` +
+            `💰 Amount: <b>${amountDisplay} ${session.symbol}</b>\n\n` +
+            `🔄 Your order is now in our processing queue.\n` +
+            `⏱️ Expected processing time: 2-10 minutes\n\n` +
+            `🤖 An automated agent will be assigned shortly.`,
           {
             parse_mode: "HTML",
             reply_markup: {
               keyboard: [[{ text: "📊 My Transactions" }, { text: "🔄 New Transaction" }]],
               resize_keyboard: true,
             },
-          }
+          },
         )
 
         // Reset session
@@ -1808,13 +1817,13 @@ async function setupBot() {
 
         await sendStaffNotification(
           `🚨 <b>NEW ${session.transactionType?.toUpperCase()} ORDER!</b>\n\n` +
-          `👤 Customer: ${userInfo}\n` +
-          `🪙 Token: ${session.symbol} (${session.coin})\n` +
-          `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n` +
-          `🆔 Order ID: <code>#${orderId}</code>\n\n` +
-          `💼 Click below to handle this order`,
+            `👤 Customer: ${userInfo}\n` +
+            `🪙 Token: ${session.symbol} (${session.coin})\n` +
+            `💰 Amount: ${amountDisplay} ${session.symbol}${tokenInfo}\n` +
+            `🆔 Order ID: <code>#${orderId}</code>\n\n` +
+            `💼 Click below to handle this order`,
           orderId,
-          "high"
+          "high",
         )
 
         console.log(`✅ Order ${orderId} created for user ${getUserInfo(ctx)}`)
@@ -1829,20 +1838,17 @@ async function setupBot() {
       if (!userId) return
 
       await setUserSession(userId, { step: "main_menu", isStaff: false })
-      await ctx.reply(
-        "❌ <b>Transaction Cancelled</b>\n\nWhat would you like to do?",
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-          },
-        }
-      )
+      await ctx.reply("❌ <b>Transaction Cancelled</b>\n\nWhat would you like to do?", {
+        parse_mode: "HTML",
+        reply_markup: {
+          keyboard: [
+            [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
+            [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
+            [{ text: "❓ Help & Support" }],
+          ],
+          resize_keyboard: true,
+        },
+      })
     })
 
     bot.hears("🔄 New Transaction", async (ctx) => {
@@ -1861,7 +1867,7 @@ async function setupBot() {
 
         const messageText = ctx.message?.text || ""
         const orderIdPart = messageText.replace("📋 Manage #", "")
-        
+
         // Find the full order ID
         const userTransactionsSnapshot = await db.collection("transactions").where("userId", "==", userId).get()
         let orderId = null
@@ -1885,17 +1891,19 @@ async function setupBot() {
         }
 
         const transaction = transactionDoc.data()
-        const amountDisplay = transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-        const statusEmoji = {
-          pending: "⏳ Processing",
-          waiting_payment: "💳 Awaiting Payment",
-          waiting_tokens: "📤 Awaiting Tokens",
-          payment_sent: "🔄 Payment Verification",
-          tokens_sent: "✅ Tokens Sent",
-          in_progress: "🔄 Processing",
-          completed: "✅ Completed",
-          cancelled: "❌ Cancelled",
-        }[transaction.status] || "❓ Unknown"
+        const amountDisplay =
+          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
+        const statusEmoji =
+          {
+            pending: "⏳ Processing",
+            waiting_payment: "💳 Awaiting Payment",
+            waiting_tokens: "📤 Awaiting Tokens",
+            payment_sent: "🔄 Payment Verification",
+            tokens_sent: "✅ Tokens Sent",
+            in_progress: "🔄 Processing",
+            completed: "✅ Completed",
+            cancelled: "❌ Cancelled",
+          }[transaction.status] || "❓ Unknown"
 
         let basicInfo = `📋 <b>ORDER SUMMARY</b>\n\n`
         basicInfo += `🆔 Order ID: <code>#${orderId}</code>\n`
@@ -2025,17 +2033,17 @@ async function setupBot() {
 
       await ctx.reply(
         "📝 <b>SUBMIT PAYMENT HASH</b>\n\n" +
-        "Please provide your payment transaction hash for verification.\n\n" +
-        "📋 Example:\n" +
-        "<code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>\n\n" +
-        "⚠️ Make sure the hash is correct!",
+          "Please provide your payment transaction hash for verification.\n\n" +
+          "📋 Example:\n" +
+          "<code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>\n\n" +
+          "⚠️ Make sure the hash is correct!",
         {
           parse_mode: "HTML",
           reply_markup: {
             keyboard: [[{ text: "📊 Back to Transactions" }]],
             resize_keyboard: true,
           },
-        }
+        },
       )
     })
 
@@ -2054,17 +2062,17 @@ async function setupBot() {
 
       await ctx.reply(
         "📝 <b>SUBMIT TRANSACTION HASH</b>\n\n" +
-        "Please provide your token sending transaction hash for verification.\n\n" +
-        "📋 Example:\n" +
-        "<code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>\n\n" +
-        "⚠️ Make sure the hash is correct!",
+          "Please provide your token sending transaction hash for verification.\n\n" +
+          "📋 Example:\n" +
+          "<code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>\n\n" +
+          "⚠️ Make sure the hash is correct!",
         {
           parse_mode: "HTML",
           reply_markup: {
             keyboard: [[{ text: "📊 Back to Transactions" }]],
             resize_keyboard: true,
           },
-        }
+        },
       )
     })
 
@@ -2084,16 +2092,16 @@ async function setupBot() {
 
       await ctx.reply(
         "💬 <b>CHAT WITH SUPPORT</b>\n\n" +
-        `You are now connected to support for order <code>#${session.currentTransactionId}</code>.\n\n` +
-        "Type your message and it will be forwarded to our support team.\n\n" +
-        "💡 You can ask questions about your order status, payment, or any issues.",
+          `You are now connected to support for order <code>#${session.currentTransactionId}</code>.\n\n` +
+          "Type your message and it will be forwarded to our support team.\n\n" +
+          "💡 You can ask questions about your order status, payment, or any issues.",
         {
           parse_mode: "HTML",
           reply_markup: {
             keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
             resize_keyboard: true,
           },
-        }
+        },
       )
     })
 
@@ -2110,15 +2118,15 @@ async function setupBot() {
       // Trigger the manage transaction display again
       const orderId = session.currentTransactionId
       const orderIdPart = orderId.slice(-6)
-      
+
       // Simulate the manage button click
       ctx.message.text = `📋 Manage #${orderIdPart}`
-      
+
       // Find and call the manage handler
-      const manageHandlers = bot.handlers.filter(h => 
-        h.trigger && h.trigger.test && h.trigger.test(`📋 Manage #${orderIdPart}`)
+      const manageHandlers = bot.handlers.filter(
+        (h) => h.trigger && h.trigger.test && h.trigger.test(`📋 Manage #${orderIdPart}`),
       )
-      
+
       if (manageHandlers.length > 0) {
         await manageHandlers[0].middleware(ctx)
       } else {
@@ -2170,12 +2178,12 @@ async function setupBot() {
 
         await ctx.reply(
           `✅ <b>ADMIN ADDED SUCCESSFULLY!</b>\n\n` +
-          `👤 Name: <b>${adminName}</b>\n` +
-          `🤖 Bot Display Name: <b>${botDisplayName}</b>\n` +
-          `🆔 User ID: <code>${newAdminId}</code>\n` +
-          `👑 Role: <b>Admin</b>\n\n` +
-          `They can now manage orders and customer service.`,
-          { parse_mode: "HTML" }
+            `👤 Name: <b>${adminName}</b>\n` +
+            `🤖 Bot Display Name: <b>${botDisplayName}</b>\n` +
+            `🆔 User ID: <code>${newAdminId}</code>\n` +
+            `👑 Role: <b>Admin</b>\n\n` +
+            `They can now manage orders and customer service.`,
+          { parse_mode: "HTML" },
         )
 
         // Notify new admin
@@ -2183,15 +2191,15 @@ async function setupBot() {
           await bot.api.sendMessage(
             newAdminId,
             `🎉 <b>WELCOME TO THE TEAM!</b>\n\n` +
-            `You have been added as an Admin for Vintage & Crap Coin Store!\n\n` +
-            `🤖 Your agent name: <b>${botDisplayName}</b>\n` +
-            `(Customers will see you as this bot name)\n\n` +
-            `🏪 <b>You can now:</b>\n` +
-            `• Manage customer orders\n` +
-            `• Handle customer support\n` +
-            `• Add customer service reps\n\n` +
-            `💬 Type /start to access the admin panel.`,
-            { parse_mode: "HTML" }
+              `You have been added as an Admin for Vintage & Crap Coin Store!\n\n` +
+              `🤖 Your agent name: <b>${botDisplayName}</b>\n` +
+              `(Customers will see you as this bot name)\n\n` +
+              `🏪 <b>You can now:</b>\n` +
+              `• Manage customer orders\n` +
+              `• Handle customer support\n` +
+              `• Add customer service reps\n\n` +
+              `💬 Type /start to access the admin panel.`,
+            { parse_mode: "HTML" },
           )
         } catch (error) {
           console.log(`Could not notify new admin ${newAdminId}`)
@@ -2232,12 +2240,12 @@ async function setupBot() {
 
         await ctx.reply(
           `✅ <b>CUSTOMER SERVICE REP ADDED!</b>\n\n` +
-          `👤 Name: <b>${careName}</b>\n` +
-          `🤖 Bot Display Name: <b>${botDisplayName}</b>\n` +
-          `🆔 User ID: <code>${newCareId}</code>\n` +
-          `👥 Role: <b>Customer Service</b>\n\n` +
-          `They can now handle customer orders and support.`,
-          { parse_mode: "HTML" }
+            `👤 Name: <b>${careName}</b>\n` +
+            `🤖 Bot Display Name: <b>${botDisplayName}</b>\n` +
+            `🆔 User ID: <code>${newCareId}</code>\n` +
+            `👥 Role: <b>Customer Service</b>\n\n` +
+            `They can now handle customer orders and support.`,
+          { parse_mode: "HTML" },
         )
 
         // Notify new customer service rep
@@ -2245,15 +2253,15 @@ async function setupBot() {
           await bot.api.sendMessage(
             newCareId,
             `🎉 <b>WELCOME TO THE TEAM!</b>\n\n` +
-            `You have been added as a Customer Service Representative for Vintage & Crap Coin Store!\n\n` +
-            `🤖 Your agent name: <b>${botDisplayName}</b>\n` +
-            `(Customers will see you as this bot name)\n\n` +
-            `🏪 <b>You can now:</b>\n` +
-            `• Handle customer orders\n` +
-            `• Provide customer support\n` +
-            `• Process transactions\n\n` +
-            `💬 Type /start to access the customer service panel.`,
-            { parse_mode: "HTML" }
+              `You have been added as a Customer Service Representative for Vintage & Crap Coin Store!\n\n` +
+              `🤖 Your agent name: <b>${botDisplayName}</b>\n` +
+              `(Customers will see you as this bot name)\n\n` +
+              `🏪 <b>You can now:</b>\n` +
+              `• Handle customer orders\n` +
+              `• Provide customer support\n` +
+              `• Process transactions\n\n` +
+              `💬 Type /start to access the customer service panel.`,
+            { parse_mode: "HTML" },
           )
         } catch (error) {
           console.log(`Could not notify new customer service rep ${newCareId}`)
@@ -2313,8 +2321,8 @@ async function setupBot() {
         if (removed) {
           await ctx.reply(
             `✅ <b>STAFF MEMBER REMOVED</b>\n\n` +
-            `${staffInfo} (ID: <code>${staffId}</code>) has been removed from the team.`,
-            { parse_mode: "HTML" }
+              `${staffInfo} (ID: <code>${staffId}</code>) has been removed from the team.`,
+            { parse_mode: "HTML" },
           )
 
           // Notify removed staff member
@@ -2322,9 +2330,9 @@ async function setupBot() {
             await bot.api.sendMessage(
               staffId,
               `📢 <b>ACCESS REVOKED</b>\n\n` +
-              `Your staff access to Vintage & Crap Coin Store has been revoked.\n\n` +
-              `If you believe this is an error, please contact an administrator.`,
-              { parse_mode: "HTML" }
+                `Your staff access to Vintage & Crap Coin Store has been revoked.\n\n` +
+                `If you believe this is an error, please contact an administrator.`,
+              { parse_mode: "HTML" },
             )
           } catch (error) {
             console.log(`Could not notify removed staff member ${staffId}`)
@@ -2370,31 +2378,31 @@ async function setupBot() {
 
           await ctx.reply(
             `✅ <b>PAYMENT ADDRESS SENT!</b>\n\n` +
-            `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
-            `💰 Amount: <b>${amountDisplay} ${transaction.symbol}</b>\n` +
-            `📍 Payment Address: <code>${messageText}</code>\n\n` +
-            `Customer has been notified and is waiting for payment instructions.`,
+              `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
+              `💰 Amount: <b>${amountDisplay} ${transaction.symbol}</b>\n` +
+              `📍 Payment Address: <code>${messageText}</code>\n\n` +
+              `Customer has been notified and is waiting for payment instructions.`,
             {
               parse_mode: "HTML",
               reply_markup: new InlineKeyboard()
                 .text("👀 View Order", `view_${session.currentOrderId}`)
                 .text("📋 Back to Orders", "view_orders"),
-            }
+            },
           )
 
           // Notify customer
           await bot.api.sendMessage(
             transaction.userId,
             `💳 <b>PAYMENT INSTRUCTIONS</b>\n\n` +
-            `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
-            `🤖 Agent: <b>${staffDisplayName}</b>\n\n` +
-            `💰 Amount to pay: <b>${amountDisplay} ${transaction.symbol}</b>\n` +
-            `📍 Send payment to: <code>${messageText}</code>\n\n` +
-            `⚠️ <b>IMPORTANT:</b>\n` +
-            `• Send the exact amount\n` +
-            `• Use the correct network (BSC)\n` +
-            `• After payment, go to "My Transactions" and submit your transaction hash`,
-            { parse_mode: "HTML" }
+              `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
+              `🤖 Agent: <b>${staffDisplayName}</b>\n\n` +
+              `💰 Amount to pay: <b>${amountDisplay} ${transaction.symbol}</b>\n` +
+              `📍 Send payment to: <code>${messageText}</code>\n\n` +
+              `⚠️ <b>IMPORTANT:</b>\n` +
+              `• Send the exact amount\n` +
+              `• Use the correct network (BSC)\n` +
+              `• After payment, go to "My Transactions" and submit your transaction hash`,
+            { parse_mode: "HTML" },
           )
 
           session.step = "admin_panel"
@@ -2421,31 +2429,31 @@ async function setupBot() {
 
           await ctx.reply(
             `✅ <b>WALLET ADDRESS SENT!</b>\n\n` +
-            `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
-            `💰 Amount: <b>${transaction.amount} ${transaction.symbol}</b>\n` +
-            `📍 Receiving Address: <code>${messageText}</code>\n\n` +
-            `Customer has been notified and is waiting for token sending instructions.`,
+              `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
+              `💰 Amount: <b>${transaction.amount} ${transaction.symbol}</b>\n` +
+              `📍 Receiving Address: <code>${messageText}</code>\n\n` +
+              `Customer has been notified and is waiting for token sending instructions.`,
             {
               parse_mode: "HTML",
               reply_markup: new InlineKeyboard()
                 .text("👀 View Order", `view_${session.currentOrderId}`)
                 .text("📋 Back to Orders", "view_orders"),
-            }
+            },
           )
 
           // Notify customer
           await bot.api.sendMessage(
             transaction.userId,
             `📤 <b>TOKEN SENDING INSTRUCTIONS</b>\n\n` +
-            `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
-            `🤖 Agent: <b>${staffDisplayName}</b>\n\n` +
-            `💰 Amount to send: <b>${transaction.amount} ${transaction.symbol}</b>\n` +
-            `📍 Send tokens to: <code>${messageText}</code>\n\n` +
-            `⚠️ <b>IMPORTANT:</b>\n` +
-            `• Send the exact amount\n` +
-            `• Use the correct network (BSC)\n` +
-            `• After sending, go to "My Transactions" and submit your transaction hash`,
-            { parse_mode: "HTML" }
+              `🆔 Order ID: <code>#${session.currentOrderId}</code>\n` +
+              `🤖 Agent: <b>${staffDisplayName}</b>\n\n` +
+              `💰 Amount to send: <b>${transaction.amount} ${transaction.symbol}</b>\n` +
+              `📍 Send tokens to: <code>${messageText}</code>\n\n` +
+              `⚠️ <b>IMPORTANT:</b>\n` +
+              `• Send the exact amount\n` +
+              `• Use the correct network (BSC)\n` +
+              `• After sending, go to "My Transactions" and submit your transaction hash`,
+            { parse_mode: "HTML" },
           )
 
           session.step = "admin_panel"
@@ -2477,14 +2485,14 @@ async function setupBot() {
 
             await ctx.reply(
               `📤 <b>Message sent to customer</b>\n\n` +
-              `Order: <code>#${session.currentOrderId}</code>\n` +
-              `Message: "${messageText}"`,
+                `Order: <code>#${session.currentOrderId}</code>\n` +
+                `Message: "${messageText}"`,
               {
                 parse_mode: "HTML",
                 reply_markup: new InlineKeyboard()
                   .text("🔚 End Chat", `view_${session.currentOrderId}`)
                   .text("👀 View Order", `view_${session.currentOrderId}`),
-              }
+              },
             )
           }
           return
@@ -2509,9 +2517,9 @@ async function setupBot() {
             if (!isValidTxHash(messageText)) {
               await ctx.reply(
                 "❌ Invalid transaction hash format!\n\n" +
-                "Please provide a valid transaction hash starting with 0x followed by 64 hexadecimal characters.\n\n" +
-                "📝 Example: <code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>",
-                { parse_mode: "HTML" }
+                  "Please provide a valid transaction hash starting with 0x followed by 64 hexadecimal characters.\n\n" +
+                  "📝 Example: <code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>",
+                { parse_mode: "HTML" },
               )
               return
             }
@@ -2532,28 +2540,28 @@ async function setupBot() {
                 await bot.api.sendMessage(
                   transaction.assignedStaff,
                   `💳 <b>PAYMENT HASH RECEIVED!</b>\n\n` +
-                  `🆔 Order ID: <code>#${session.currentTransactionId}</code>\n` +
-                  `📝 Transaction Hash: <code>${messageText}</code>\n` +
-                  `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
-                  `Please verify the payment and proceed with the order.`,
-                  { parse_mode: "HTML" }
+                    `🆔 Order ID: <code>#${session.currentTransactionId}</code>\n` +
+                    `📝 Transaction Hash: <code>${messageText}</code>\n` +
+                    `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
+                    `Please verify the payment and proceed with the order.`,
+                  { parse_mode: "HTML" },
                 )
               }
 
               // Notify customer
               await ctx.reply(
                 `✅ <b>PAYMENT HASH SUBMITTED</b>\n\n` +
-                `📝 Hash: <code>${messageText}</code>\n` +
-                `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
-                `Your payment hash has been submitted and our team is verifying it.\n\n` +
-                `You'll be notified once the payment is confirmed.`,
+                  `📝 Hash: <code>${messageText}</code>\n` +
+                  `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
+                  `Your payment hash has been submitted and our team is verifying it.\n\n` +
+                  `You'll be notified once the payment is confirmed.`,
                 {
                   parse_mode: "HTML",
                   reply_markup: {
                     keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
                     resize_keyboard: true,
                   },
-                }
+                },
               )
 
               session.step = "main_menu"
@@ -2567,9 +2575,9 @@ async function setupBot() {
             if (!isValidTxHash(messageText)) {
               await ctx.reply(
                 "❌ Invalid transaction hash format!\n\n" +
-                "Please provide a valid transaction hash starting with 0x followed by 64 hexadecimal characters.\n\n" +
-                "📝 Example: <code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>",
-                { parse_mode: "HTML" }
+                  "Please provide a valid transaction hash starting with 0x followed by 64 hexadecimal characters.\n\n" +
+                  "📝 Example: <code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef</code>",
+                { parse_mode: "HTML" },
               )
               return
             }
@@ -2590,28 +2598,28 @@ async function setupBot() {
                 await bot.api.sendMessage(
                   transaction.assignedStaff,
                   `📤 <b>TOKENS HASH RECEIVED!</b>\n\n` +
-                  `🆔 Order ID: <code>#${session.currentTransactionId}</code>\n` +
-                  `📝 Transaction Hash: <code>${messageText}</code>\n` +
-                  `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
-                  `Please verify the tokens received and proceed with payment.`,
-                  { parse_mode: "HTML" }
+                    `🆔 Order ID: <code>#${session.currentTransactionId}</code>\n` +
+                    `📝 Transaction Hash: <code>${messageText}</code>\n` +
+                    `🔍 Verify on BSCScan: https://bscscan.com/tx/${messageText}\n\n` +
+                    `Please verify the tokens received and proceed with payment.`,
+                  { parse_mode: "HTML" },
                 )
               }
 
               // Notify customer
               await ctx.reply(
                 `✅ <b>TRANSACTION HASH SUBMITTED</b>\n\n` +
-                `📝 Hash: <code>${messageText}</code>\n` +
-                `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
-                `Your transaction hash has been submitted and our team is verifying it.\n\n` +
-                `You'll receive payment once the tokens are confirmed.`,
+                  `📝 Hash: <code>${messageText}</code>\n` +
+                  `🔍 Verify: https://bscscan.com/tx/${messageText}\n\n` +
+                  `Your transaction hash has been submitted and our team is verifying it.\n\n` +
+                  `You'll receive payment once the tokens are confirmed.`,
                 {
                   parse_mode: "HTML",
                   reply_markup: {
                     keyboard: [[{ text: "📊 Back to Transactions" }, { text: "🔙 Back to Menu" }]],
                     resize_keyboard: true,
                   },
-                }
+                },
               )
 
               session.step = "main_menu"
@@ -2640,8 +2648,8 @@ async function setupBot() {
               await bot.api.sendMessage(
                 transaction.assignedStaff,
                 `💬 <b>Customer message (Order #${session.orderId}):</b>\n\n"${messageText}"\n\n` +
-                `Reply directly to chat with the customer.`,
-                { parse_mode: "HTML" }
+                  `Reply directly to chat with the customer.`,
+                { parse_mode: "HTML" },
               )
             } else {
               // Notify all staff if no one assigned
@@ -2672,19 +2680,16 @@ async function setupBot() {
           }
 
           // Default fallback for customers
-          await ctx.reply(
-            "🤔 I didn't understand that. Please use the menu buttons or type /start to begin.",
-            {
-              reply_markup: {
-                keyboard: [
-                  [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-                  [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-                  [{ text: "❓ Help & Support" }],
-                ],
-                resize_keyboard: true,
-              },
-            }
-          )
+          await ctx.reply("🤔 I didn't understand that. Please use the menu buttons or type /start to begin.", {
+            reply_markup: {
+              keyboard: [
+                [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
+                [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
+                [{ text: "❓ Help & Support" }],
+              ],
+              resize_keyboard: true,
+            },
+          })
         } else {
           // Staff member - show admin panel
           await showEnhancedAdminPanel(ctx)

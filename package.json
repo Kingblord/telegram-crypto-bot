@@ -1,22 +1,20 @@
 {
   "name": "vintage-crap-coin-bot",
- "version": "3.0.0",
-  "description": "Complete enhanced Telegram crypto trading bot with full customer and admin experience",
+"version": "2.0.0",
+  "description": "Telegram crypto trading bot with separate notification system",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "notification": "node notification-bot.js",
+    "dev": "concurrently \"npm start\" \"npm run notification\""
   },
   "dependencies": {
     "grammy": "^1.15.3",
     "express": "^4.18.2",
-    "firebase-admin": "^12.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+    "firebase-admin": "^12.0.0",
+    "concurrently": "^7.6.0"
   },
   "engines": {
     "node": "18.x"
-  },
-  "keywords": ["telegram", "bot", "crypto", "trading", "enhanced", "complete", "customer", "admin"]
+  }
 }

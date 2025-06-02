@@ -111,6 +111,33 @@ async function isAdmin(userId) {
   }
 }
 
+// Modify the canHandleCustomers function to be more robust and add logging
+async function canHandleCustomers(userId) {
+  try {
+    if (!userId) return false
+
+    // Check admin status
+    const adminDoc = await db.collection("admins").doc(userId.toString()).get()
+    if (adminDoc.exists) {
+      console.log(`User ${userId} is an admin`)
+      return true
+    }
+
+    // Check customer care status
+    const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
+    if (careDoc.exists) {
+      console.log(`User ${userId} is customer care`)
+      return true
+    }
+
+    console.log(`User ${userId} is not staff`)
+    return false
+  } catch (error) {
+    console.error(`Error checking staff status for ${userId}:`, error)
+    return false
+  }
+}
+
 async function isCustomerCare(userId) {
   try {
     const careDoc = await db.collection("customerCare").doc(userId.toString()).get()
@@ -119,12 +146,6 @@ async function isCustomerCare(userId) {
     console.error("Error checking customer care status:", error)
     return false
   }
-}
-
-async function canHandleCustomers(userId) {
-  const adminStatus = await isAdmin(userId)
-  const careStatus = await isCustomerCare(userId)
-  return adminStatus || careStatus
 }
 
 async function getStaffDisplayName(userId) {
@@ -220,13 +241,21 @@ async function initializeSuperAdmins() {
   }
 }
 
-// Admin Panel Function
+// Enhance the showAdminPanel function to be more robust
 async function showAdminPanel(ctx) {
   try {
     const userId = ctx.from?.id
     if (!userId) return
 
+    // Mark this user as staff in their session
+    await setUserSession(userId, {
+      step: "admin_panel",
+      isStaff: true,
+      lastAccessed: new Date().toISOString(),
+    })
+
     const staffInfo = await getStaffInfo(userId)
+    const staffDisplayName = await getStaffDisplayName(userId)
 
     // Get pending orders count (simple query)
     const pendingSnapshot = await db.collection("transactions").where("status", "==", "pending").get()
@@ -234,8 +263,9 @@ async function showAdminPanel(ctx) {
     // Get active chats count (simple query)
     const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
 
-    let panelText = `🏪 SHOP KEEPER PANEL\n\n`
+    let panelText = `🏪 STAFF CONTROL PANEL\n\n`
     panelText += `👤 Welcome: ${staffInfo}\n`
+    panelText += `🤖 Your Agent Name: ${staffDisplayName}\n`
     panelText += `📊 Pending Orders: ${pendingSnapshot.size}\n`
     panelText += `💬 Active Chats: ${activeChatsSnapshot.size}\n\n`
     panelText += `What would you like to do?`
@@ -254,6 +284,8 @@ async function showAdminPanel(ctx) {
         resize_keyboard: true,
       },
     })
+
+    console.log(`✅ Admin panel shown to staff member ${userId}`)
   } catch (error) {
     console.error("Error showing admin panel:", error)
     await ctx.reply("❌ Sorry, there was an error loading the admin panel.")
@@ -1431,147 +1463,54 @@ async function setupBot() {
       }
     })
 
-    bot.hears("🔙 Back to Menu", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
+    // Add a new function to check and redirect staff to admin panel
+    async function checkAndRedirectStaff(ctx) {
+      const userId = ctx.from?.id
+      if (!userId) return false
 
-        // Check if staff member
-        if (await canHandleCustomers(userId)) {
+      try {
+        // Check if user is staff (admin or customer care)
+        const isStaffMember = await canHandleCustomers(userId)
+
+        if (isStaffMember) {
+          console.log(`✅ Staff member ${userId} detected - showing admin panel`)
           await showAdminPanel(ctx)
-          return
+          return true
         }
-
-        await setUserSession(userId, { step: "main_menu" })
-
-        await ctx.reply("🏪 Welcome back to Vintage & Crap Coin Store!\n\nReady for more crypto adventures?", {
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          },
-        })
+        return false
       } catch (error) {
-        console.error("Error going back to menu:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
+        console.error("Error checking staff status:", error)
+        return false
       }
-    })
+    }
 
-    bot.hears("🔍 Custom Token (Contract Address)", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        const session = await getUserSession(userId)
-        if (session.step !== "select_token") {
-          await ctx.reply("Please start over with /start")
-          return
-        }
-
-        session.step = "custom_contract"
-        await setUserSession(userId, session)
-
-        await ctx.reply(
-          "🔍 CUSTOM TOKEN SEARCH\n\n" +
-            "Please send the contract address of the token you want to trade.\n\n" +
-            "📝 Example:\n" +
-            "0x1234567890abcdef1234567890abcdef12345678\n\n" +
-            "⚠️ Make sure the address is correct!",
-          {
-            reply_markup: {
-              keyboard: [[{ text: "🔙 Back to Token List" }]],
-              resize_keyboard: true,
-            },
-          },
-        )
-      } catch (error) {
-        console.error("Error in custom token search:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.hears("🔙 Back to Token List", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        const session = await getUserSession(userId)
-        if (session.step !== "custom_contract") {
-          await ctx.reply("Please start over with /start")
-          return
-        }
-
-        session.step = "select_token"
-        await setUserSession(userId, session)
-
-        const tokenButtons = AVAILABLE_TOKENS.map((token) => [{ text: `${token.symbol} - ${token.name}` }])
-        tokenButtons.push([{ text: "🔍 Custom Token (Contract Address)" }])
-        tokenButtons.push([{ text: "🔙 Back to Menu" }])
-
-        const actionText = session.transactionType === "buy" ? "purchase" : "sell"
-        await ctx.reply(
-          `💼 ${session.transactionType?.toUpperCase()} CRYPTOCURRENCY\n\n` +
-            `Select the token you want to ${actionText}:`,
-          {
-            reply_markup: {
-              keyboard: tokenButtons,
-              resize_keyboard: true,
-              one_time_keyboard: true,
-            },
-          },
-        )
-      } catch (error) {
-        console.error("Error going back to token list:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.hears("🔄 New Transaction", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId) return
-
-        await setUserSession(userId, { step: "main_menu" })
-
-        await ctx.reply("🏪 Browse Our Coin Collection\n\nWhat would you like to do?", {
-          reply_markup: {
-            keyboard: [
-              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
-              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
-              [{ text: "❓ Help & Support" }],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          },
-        })
-      } catch (error) {
-        console.error("Error in new transaction:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // ===========================================
-    // COMMANDS
-    // ===========================================
-
-    // Start command
+    // Modify the start command to be more robust
     bot.command("start", async (ctx) => {
       try {
         const userId = ctx.from?.id
         if (!userId) return
 
-        // Check if user is staff
-        if (await canHandleCustomers(userId)) {
+        console.log(`User ${userId} started the bot - checking if staff...`)
+
+        // Check if user is staff FIRST - prioritize staff panel
+        const isStaff = await canHandleCustomers(userId)
+
+        if (isStaff) {
+          console.log(`✅ Staff member ${userId} detected via /start - showing admin panel`)
+          // Save staff session
+          await setUserSession(userId, {
+            step: "admin_panel",
+            isStaff: true,
+          })
           await showAdminPanel(ctx)
           return
         }
 
+        // Only show user interface if NOT staff
+        console.log(`Regular user ${userId} detected - showing user interface`)
+
         // Reset user session
-        await setUserSession(userId, { step: "start" })
+        await setUserSession(userId, { step: "start", isStaff: false })
 
         // Save user info to Firestore
         const user = ctx.from
@@ -1607,634 +1546,111 @@ async function setupBot() {
           },
         )
 
-        await setUserSession(userId, { step: "main_menu" })
-        console.log(`✅ User ${getUserInfo(ctx)} started the bot`)
+        await setUserSession(userId, { step: "main_menu", isStaff: false })
+        console.log(`✅ Regular user ${getUserInfo(ctx)} started the bot`)
       } catch (error) {
         console.error("Error in start command:", error)
         await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 
-    // Admin Commands
-    bot.command("take", async (ctx) => {
+    // Add a special command for staff to access their panel
+    bot.command("admin", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
+        if (!userId) return
+
+        const isStaff = await canHandleCustomers(userId)
+        if (isStaff) {
+          console.log(`✅ Staff member ${userId} accessed admin panel via /admin command`)
+          await setUserSession(userId, { step: "admin_panel", isStaff: true })
+          await showAdminPanel(ctx)
+        } else {
+          await ctx.reply("❌ You are not authorized to access the admin panel.")
         }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /take [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.status !== "pending") {
-          await ctx.reply("❌ This order is not available for assignment.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "in_progress",
-          assignedStaff: userId,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          staffId: userId,
-          status: "active",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const staffInfo = await getStaffInfo(userId)
-        const staffDisplayName = await getStaffDisplayName(userId)
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `✅ ORDER ASSIGNED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `🪙 Token: ${transaction.symbol} (${transaction.coin})\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n` +
-            `👤 Customer ID: ${transaction.userId}\n\n` +
-            `💬 You can now chat with the customer. All messages will be forwarded.\n\n` +
-            `Next steps:\n` +
-            `• For BUY orders: /payment ${orderId} [payment_address]\n` +
-            `• For SELL orders: /wallet ${orderId} [receiving_address]`,
-        )
-
-        // Notify customer with bot name
-        await bot.api.sendMessage(
-          transaction.userId,
-          `🤖 AGENT ASSIGNED!\n\n` +
-            `${staffDisplayName} has been assigned to your order #${orderId}!\n\n` +
-            `They will assist you with your ${transaction.type} of ${amountDisplay} ${transaction.symbol}.\n\n` +
-            `💬 You can chat here and your messages will be forwarded to them.`,
-        )
-
-        console.log(`✅ Order ${orderId} assigned to staff ${staffInfo}`)
       } catch (error) {
-        console.error("Error in take command:", error)
+        console.error("Error in admin command:", error)
         await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 
-    bot.command("payment", async (ctx) => {
+    // Modify the "Back to Menu" handler to be more robust
+    bot.hears("🔙 Back to Menu", async (ctx) => {
       try {
         const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
+        if (!userId) return
+
+        // Get user session to check if they're staff
+        const session = await getUserSession(userId)
+
+        // Check if user is staff
+        const isStaff = await canHandleCustomers(userId)
+
+        // If staff or session indicates they're staff, show admin panel
+        if (isStaff || session.isStaff) {
+          console.log(`✅ Staff member ${userId} returned to admin panel`)
+          await setUserSession(userId, { step: "admin_panel", isStaff: true })
+          await showAdminPanel(ctx)
           return
         }
 
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /payment [order_id] [payment_address]")
-          return
-        }
+        // Regular user - show user menu
+        await setUserSession(userId, { step: "main_menu", isStaff: false })
 
-        const orderId = args[0]
-        const paymentAddress = args.slice(1).join(" ")
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        if (transaction.type !== "buy") {
-          await ctx.reply("❌ This command is only for BUY orders.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "waiting_payment",
-          paymentAddress: paymentAddress,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        await ctx.reply("🏪 Welcome back to Vintage & Crap Coin Store!\n\nReady for more crypto adventures?", {
+          reply_markup: {
+            keyboard: [
+              [{ text: "💰 Buy Crypto" }, { text: "💱 Sell Crypto" }],
+              [{ text: "📋 Available Tokens" }, { text: "📊 My Transactions" }],
+              [{ text: "❓ Help & Support" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          },
         })
 
-        const amountDisplay = `$${transaction.amount} USD worth of`
-        const staffDisplayName = await getStaffDisplayName(userId)
-
-        await ctx.reply(
-          `✅ PAYMENT ADDRESS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n` +
-            `📍 Payment Address: ${paymentAddress}\n\n` +
-            `Customer has been notified. Waiting for payment...`,
-        )
-
-        // Notify customer with clearer instructions
-        await bot.api.sendMessage(
-          transaction.userId,
-          `💳 PAYMENT INSTRUCTIONS\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🤖 Agent: ${staffDisplayName}\n\n` +
-            `💰 Amount to pay: ${amountDisplay} ${transaction.symbol}\n` +
-            `📍 Send payment to: \`${paymentAddress}\`\n\n` +
-            `⚠️ IMPORTANT:\n` +
-            `• Send the exact amount\n` +
-            `• Use the correct network (BSC)\n` +
-            `• After payment, go to "My Transactions" and submit your transaction hash`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Payment address sent for order ${orderId}`)
+        console.log(`✅ Regular user ${getUserInfo(ctx)} returned to main menu`)
       } catch (error) {
-        console.error("Error in payment command:", error)
+        console.error("Error going back to menu:", error)
         await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 
-    bot.command("wallet", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /wallet [order_id] [receiving_address]")
-          return
-        }
-
-        const orderId = args[0]
-        const receivingAddress = args.slice(1).join(" ")
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        if (transaction.type !== "sell") {
-          await ctx.reply("❌ This command is only for SELL orders.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "waiting_tokens",
-          receivingAddress: receivingAddress,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const staffDisplayName = await getStaffDisplayName(userId)
-
-        await ctx.reply(
-          `✅ RECEIVING ADDRESS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount: ${transaction.amount} ${transaction.symbol}\n` +
-            `📍 Receiving Address: ${receivingAddress}\n\n` +
-            `Customer has been notified. Waiting for tokens...`,
-        )
-
-        // Notify customer with clearer instructions
-        await bot.api.sendMessage(
-          transaction.userId,
-          `📤 TOKEN SENDING INSTRUCTIONS\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🤖 Agent: ${staffDisplayName}\n\n` +
-            `💰 Amount to send: ${transaction.amount} ${transaction.symbol}\n` +
-            `📍 Send tokens to: \`${receivingAddress}\`\n\n` +
-            `⚠️ IMPORTANT:\n` +
-            `• Send the exact amount\n` +
-            `• Use the correct network (BSC)\n` +
-            `• After sending, go to "My Transactions" and submit your transaction hash`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Receiving address sent for order ${orderId}`)
-      } catch (error) {
-        console.error("Error in wallet command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("send", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 3) {
-          await ctx.reply("❌ Usage: /send [order_id] [amount] [transaction_hash]")
-          return
-        }
-
-        const orderId = args[0]
-        const amount = args[1]
-        const txHash = args[2]
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "tokens_sent",
-          sentAmount: amount,
-          sentTxHash: txHash,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const staffDisplayName = await getStaffDisplayName(userId)
-
-        await ctx.reply(
-          `✅ TOKENS SENT\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `💰 Amount sent: ${amount} ${transaction.symbol}\n` +
-            `📝 Transaction Hash: ${txHash}\n\n` +
-            `Customer has been notified. Use /complete ${orderId} to finish the order.`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `✅ TOKENS RECEIVED!\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🤖 Agent: ${staffDisplayName}\n` +
-            `💰 Amount: ${amount} ${transaction.symbol}\n` +
-            `📝 Transaction Hash: \`${txHash}\`\n\n` +
-            `🎉 Your tokens have been sent! Please check your wallet.\n` +
-            `🔍 Verify on BSCScan: https://bscscan.com/tx/${txHash}`,
-          { parse_mode: "Markdown" },
-        )
-
-        console.log(`✅ Tokens sent for order ${orderId}`)
-      } catch (error) {
-        console.error("Error in send command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("complete", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /complete [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "completed",
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          status: "completed",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `✅ ORDER COMPLETED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `🎉 Transaction successfully completed!`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `🎉 TRANSACTION COMPLETED!\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `✅ Your transaction has been successfully completed!\n` +
-            `🙏 Thank you for using Vintage & Crap Coin Store!\n\n` +
-            `💬 Type /start to make another transaction.`,
-        )
-
-        console.log(`✅ Order ${orderId} completed by staff ${await getStaffInfo(userId)}`)
-      } catch (error) {
-        console.error("Error in complete command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("cancel", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await canHandleCustomers(userId))) {
-          await ctx.reply("❌ You are not authorized to use this command.")
-          return
-        }
-
-        const orderId = ctx.match?.trim()
-        if (!orderId) {
-          await ctx.reply("❌ Please provide an order ID: /cancel [order_id]")
-          return
-        }
-
-        // Get transaction
-        const transactionDoc = await db.collection("transactions").doc(orderId).get()
-        if (!transactionDoc.exists) {
-          await ctx.reply("❌ Order not found.")
-          return
-        }
-
-        const transaction = transactionDoc.data()
-        if (transaction.assignedStaff !== userId) {
-          await ctx.reply("❌ You are not assigned to this order.")
-          return
-        }
-
-        // Update transaction
-        await db.collection("transactions").doc(orderId).update({
-          status: "cancelled",
-          cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        // Update chat session
-        await db.collection("chatSessions").doc(orderId).update({
-          status: "cancelled",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        const amountDisplay =
-          transaction.type === "buy" ? `$${transaction.amount} USD worth of` : `${transaction.amount}`
-
-        await ctx.reply(
-          `❌ ORDER CANCELLED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `Order has been cancelled.`,
-        )
-
-        // Notify customer
-        await bot.api.sendMessage(
-          transaction.userId,
-          `❌ TRANSACTION CANCELLED\n\n` +
-            `🆔 Order ID: #${orderId}\n` +
-            `🔄 Action: ${transaction.type.toUpperCase()}\n` +
-            `💰 Amount: ${amountDisplay} ${transaction.symbol}\n\n` +
-            `Your transaction has been cancelled.\n` +
-            `💬 Type /start to make a new transaction.`,
-        )
-
-        console.log(`❌ Order ${orderId} cancelled by staff ${await getStaffInfo(userId)}`)
-      } catch (error) {
-        console.error("Error in cancel command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // Staff Management Commands with Bot Names
-    bot.command("addadmin", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await isAdmin(userId))) {
-          await ctx.reply("❌ Only admins can add new admins.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /addadmin [user_id] [name]")
-          return
-        }
-
-        const newAdminId = args[0]
-        const adminName = args.slice(1).join(" ")
-        const botDisplayName = generateBotName()
-
-        // Add to Firestore
-        await db.collection("admins").doc(newAdminId).set({
-          id: newAdminId,
-          role: "admin",
-          name: adminName,
-          displayName: botDisplayName,
-          addedBy: userId,
-          addedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ ADMIN ADDED\n\n` +
-            `👤 Name: ${adminName}\n` +
-            `🤖 Bot Display Name: ${botDisplayName}\n` +
-            `🆔 User ID: ${newAdminId}\n` +
-            `👑 Role: Admin\n\n` +
-            `They can now manage orders and customer service.`,
-        )
-
-        // Notify new admin
-        try {
-          await bot.api.sendMessage(
-            newAdminId,
-            `🎉 WELCOME TO THE TEAM!\n\n` +
-              `You have been added as an Admin for Vintage & Crap Coin Store!\n\n` +
-              `🤖 Your agent name: ${botDisplayName}\n` +
-              `(Customers will see you as this bot name)\n\n` +
-              `🏪 You can now:\n` +
-              `• Manage customer orders\n` +
-              `• Handle customer support\n` +
-              `• Add customer service reps\n\n` +
-              `💬 Type /start to access the admin panel.`,
-          )
-        } catch (error) {
-          console.log(`Could not notify new admin ${newAdminId}`)
-        }
-
-        console.log(`✅ Admin ${adminName} (${newAdminId}) added by ${userId}`)
-      } catch (error) {
-        console.error("Error in addadmin command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("addcare", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await isAdmin(userId))) {
-          await ctx.reply("❌ Only admins can add customer service representatives.")
-          return
-        }
-
-        const args = ctx.match?.trim().split(" ")
-        if (!args || args.length < 2) {
-          await ctx.reply("❌ Usage: /addcare [user_id] [name]")
-          return
-        }
-
-        const newCareId = args[0]
-        const careName = args.slice(1).join(" ")
-        const botDisplayName = generateBotName()
-
-        // Add to Firestore
-        await db.collection("customerCare").doc(newCareId).set({
-          id: newCareId,
-          name: careName,
-          displayName: botDisplayName,
-          addedBy: userId,
-          addedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-
-        await ctx.reply(
-          `✅ CUSTOMER SERVICE REP ADDED\n\n` +
-            `👤 Name: ${careName}\n` +
-            `🤖 Bot Display Name: ${botDisplayName}\n` +
-            `🆔 User ID: ${newCareId}\n` +
-            `👥 Role: Customer Service\n\n` +
-            `They can now handle customer orders and support.`,
-        )
-
-        // Notify new customer service rep
-        try {
-          await bot.api.sendMessage(
-            newCareId,
-            `🎉 WELCOME TO THE TEAM!\n\n` +
-              `You have been added as a Customer Service Representative for Vintage & Crap Coin Store!\n\n` +
-              `🤖 Your agent name: ${botDisplayName}\n` +
-              `(Customers will see you as this bot name)\n\n` +
-              `🏪 You can now:\n` +
-              `• Handle customer orders\n` +
-              `• Provide customer support\n` +
-              `• Process transactions\n\n` +
-              `💬 Type /start to access the customer service panel.`,
-          )
-        } catch (error) {
-          console.log(`Could not notify new customer service rep ${newCareId}`)
-        }
-
-        console.log(`✅ Customer service rep ${careName} (${newCareId}) added by ${userId}`)
-      } catch (error) {
-        console.error("Error in addcare command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    bot.command("removestaff", async (ctx) => {
-      try {
-        const userId = ctx.from?.id
-        if (!userId || !(await isAdmin(userId))) {
-          await ctx.reply("❌ Only admins can remove staff members.")
-          return
-        }
-
-        const staffId = ctx.match?.trim()
-        if (!staffId) {
-          await ctx.reply("❌ Usage: /removestaff [user_id]")
-          return
-        }
-
-        // Prevent removing the original super admin
-        if (isSuperAdmin(staffId)) {
-          await ctx.reply("❌ Cannot remove super admin.")
-          return
-        }
-
-        if (isSuperAdmin(staffId)) {
-          await ctx.reply("❌ Cannot remove super admin.")
-          return
-        }
-
-        // Check if admin
-        const adminDoc = await db.collection("admins").doc(staffId).get()
-        if (adminDoc.exists) {
-          await db.collection("admins").doc(staffId).delete()
-          const admin = adminDoc.data()
-          await ctx.reply(`✅ Admin ${admin.name} (${staffId}) has been removed.`)
-          console.log(`✅ Admin ${admin.name} (${staffId}) removed by ${userId}`)
-          return
-        }
-
-        // Check if customer care
-        const careDoc = await db.collection("customerCare").doc(staffId).get()
-        if (careDoc.exists) {
-          await db.collection("customerCare").doc(staffId).delete()
-          const care = careDoc.data()
-          await ctx.reply(`✅ Customer service rep ${care.name} (${staffId}) has been removed.`)
-          console.log(`✅ Customer service rep ${care.name} (${staffId}) removed by ${userId}`)
-          return
-        }
-
-        await ctx.reply("❌ Staff member not found.")
-      } catch (error) {
-        console.error("Error in removestaff command:", error)
-        await ctx.reply("❌ Sorry, there was an error. Please try again.")
-      }
-    })
-
-    // ===========================================
-    // TEXT MESSAGE HANDLER (MUST COME LAST)
-    // ===========================================
-
+    // Modify the text message handler to check for staff status first
     bot.on("message:text", async (ctx) => {
       try {
         const userId = ctx.from?.id
         const messageText = ctx.message?.text
         if (!userId || !messageText) return
 
+        // Check if user is staff first
+        const isStaff = await canHandleCustomers(userId)
         const session = await getUserSession(userId)
+
+        // If this is the first interaction or we don't know if they're staff yet
+        if (!session.hasOwnProperty("isStaff")) {
+          // Update session with staff status
+          session.isStaff = isStaff
+          await setUserSession(userId, session)
+
+          // If they're staff and not in a specific workflow, show admin panel
+          if (
+            isStaff &&
+            ![
+              "enter_amount",
+              "custom_contract",
+              "enter_payment_hash",
+              "enter_token_hash",
+              "chat_with_support",
+            ].includes(session.step)
+          ) {
+            console.log(`✅ Staff member ${userId} detected in text handler - showing admin panel`)
+            await showAdminPanel(ctx)
+            return
+          }
+        }
+
+        // Continue with the rest of the handler...
 
         // Handle amount entry
         if (session.step === "enter_amount") {

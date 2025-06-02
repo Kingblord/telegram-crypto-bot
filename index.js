@@ -721,7 +721,10 @@ async function cancelOrder(ctx, orderId) {
 async function showActiveChats(ctx) {
   try {
     const userId = ctx.from?.id
-    if (!userId || !(await canHandleCustomers(userId))) return
+    if (!userId || !(await canHandleCustomers(userId))) {
+      console.log(`❌ User ${userId} not authorized for active chats`)
+      return
+    }
 
     console.log(`🔍 Fetching active chats for staff ${userId}`)
 
@@ -731,6 +734,7 @@ async function showActiveChats(ctx) {
     console.log(`📊 Found ${activeChatsSnapshot.size} active chat sessions`)
 
     if (activeChatsSnapshot.empty) {
+      console.log("📭 No active chats found")
       await ctx.reply(
         "💬 <b>ACTIVE CHATS</b>\n\nNo active chats at the moment.\n\nActive conversations will appear here.",
         {
@@ -747,7 +751,7 @@ async function showActiveChats(ctx) {
 
     for (const chatDoc of activeChatsSnapshot.docs) {
       const chat = chatDoc.data()
-      console.log(`📋 Processing chat session:`, chat)
+      console.log(`📋 Processing chat session:`, { orderId: chat.orderId, userId: chat.userId, staffId: chat.staffId })
 
       try {
         // Get transaction details
@@ -759,7 +763,7 @@ async function showActiveChats(ctx) {
         }
 
         const order = orderDoc.data()
-        console.log(`📦 Found order:`, order)
+        console.log(`📦 Found order:`, { id: order.id, type: order.type, symbol: order.symbol, status: order.status })
 
         if (order) {
           validChats++
@@ -811,6 +815,7 @@ async function showActiveChats(ctx) {
     }
 
     if (validChats === 0) {
+      console.log("📭 No valid active chats found after processing")
       await ctx.reply(
         "💬 <b>ACTIVE CHATS</b>\n\nNo valid active chats found.\n\nActive conversations will appear here.",
         {
@@ -1570,42 +1575,23 @@ async function setupBot() {
         if (!userId) return
         await ctx.answerCallbackQuery()
 
+        console.log(`🔘 Callback query received: ${data} from user ${userId}`)
+
         // Route to appropriate handler
         if (data === "view_orders") {
+          console.log("📋 Routing to view orders")
           await showOrdersWithActions(ctx)
-        } else if (data.startsWith("orders_page_")) {
-          const page = Number.parseInt(data.split("_")[2])
-          await showOrdersWithActions(ctx, page)
-        } else if (data.startsWith("take_")) {
-          const orderId = data.substring(5)
-          await takeOrder(ctx, orderId)
-        } else if (data.startsWith("view_")) {
-          const orderId = data.substring(5)
-          await showOrderDetails(ctx, orderId)
-        } else if (data.startsWith("payment_")) {
-          const orderId = data.substring(8)
-          await handlePaymentAddress(ctx, orderId)
-        } else if (data.startsWith("wallet_")) {
-          const orderId = data.substring(7)
-          await handleWalletAddress(ctx, orderId)
-        } else if (data.startsWith("complete_")) {
-          const orderId = data.substring(9)
-          await completeOrder(ctx, orderId)
-        } else if (data.startsWith("cancel_")) {
-          const orderId = data.substring(7)
-          await cancelOrder(ctx, orderId)
-        } else if (data.startsWith("chat_")) {
-          const orderId = data.substring(5)
-          await startChatWithCustomer(ctx, orderId)
-        } else if (data === "back_to_panel") {
-          await showEnhancedAdminPanel(ctx)
         } else if (data === "view_chats") {
+          console.log("💬 Routing to view chats")
           await showActiveChats(ctx)
-        } else if (data === "manage_staff") {
-          await showStaffManagement(ctx)
         } else if (data === "view_stats") {
+          console.log("📊 Routing to view statistics")
           await showStatistics(ctx)
+        } else if (data === "manage_staff") {
+          console.log("👥 Routing to manage staff")
+          await showStaffManagement(ctx)
         } else if (data === "staff_help") {
+          console.log("❓ Routing to staff help")
           await ctx.reply(
             "❓ <b>STAFF HELP GUIDE</b>\n\n" +
               "🎯 <b>Taking Orders:</b>\n" +
@@ -1629,10 +1615,48 @@ async function setupBot() {
               reply_markup: new InlineKeyboard().text("🔙 Back to Panel", "back_to_panel"),
             },
           )
+        } else if (data === "back_to_panel") {
+          console.log("🔙 Routing back to panel")
+          await showEnhancedAdminPanel(ctx)
+        } else if (data.startsWith("orders_page_")) {
+          const page = Number.parseInt(data.split("_")[2])
+          console.log(`📄 Routing to orders page ${page}`)
+          await showOrdersWithActions(ctx, page)
+        } else if (data.startsWith("take_")) {
+          const orderId = data.substring(5)
+          console.log(`🎯 Routing to take order ${orderId}`)
+          await takeOrder(ctx, orderId)
+        } else if (data.startsWith("view_")) {
+          const orderId = data.substring(5)
+          console.log(`👀 Routing to view order ${orderId}`)
+          await showOrderDetails(ctx, orderId)
+        } else if (data.startsWith("payment_")) {
+          const orderId = data.substring(8)
+          console.log(`💳 Routing to payment address for ${orderId}`)
+          await handlePaymentAddress(ctx, orderId)
+        } else if (data.startsWith("wallet_")) {
+          const orderId = data.substring(7)
+          console.log(`📤 Routing to wallet address for ${orderId}`)
+          await handleWalletAddress(ctx, orderId)
+        } else if (data.startsWith("complete_")) {
+          const orderId = data.substring(9)
+          console.log(`✅ Routing to complete order ${orderId}`)
+          await completeOrder(ctx, orderId)
+        } else if (data.startsWith("cancel_")) {
+          const orderId = data.substring(7)
+          console.log(`❌ Routing to cancel order ${orderId}`)
+          await cancelOrder(ctx, orderId)
+        } else if (data.startsWith("chat_")) {
+          const orderId = data.substring(5)
+          console.log(`💬 Routing to chat for order ${orderId}`)
+          await startChatWithCustomer(ctx, orderId)
+        } else {
+          console.log(`❓ Unknown callback query: ${data}`)
+          await ctx.reply("❌ Unknown action. Please try again.")
         }
       } catch (error) {
         console.error("Error handling callback:", error)
-        await ctx.reply("❌ Sorry, there was an error.")
+        await ctx.reply("❌ Sorry, there was an error. Please try again.")
       }
     })
 

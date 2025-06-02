@@ -1258,11 +1258,11 @@ bot.command("start", async (ctx) => {
 
 // Customer button handlers
 bot.hears("💰 Buy Crypto", async (ctx) => {
-  await handleTransactionType(ctx, "buy")
+  await handleTransactionTypeInner(ctx, "buy")
 })
 
 bot.hears("💱 Sell Crypto", async (ctx) => {
-  await handleTransactionType(ctx, "sell")
+  await handleTransactionTypeInner(ctx, "sell")
 })
 
 bot.hears("📋 Available Tokens", async (ctx) => {
@@ -2287,25 +2287,29 @@ bot.catch((err) => {
   console.error("❌ Bot error:", err)
 })
 
-console.log("✅ Enhanced Vintage & Crap Coin Store Bot initialized successfully!")
-console.log("👑 Super Admin IDs:", Array.from(SUPER_ADMIN_IDS))
-console.log("🔔 Notification Bot:", notificationBot ? "Enabled" : "Disabled")
-} catch (error)
-{
-  console.error("❌ Error setting up enhanced bot:", error)
-}
+// Initialize bot
+async function setupBot() {
+  try {
+    await bot.init()
+    if (notificationBot) {
+      await notificationBot.init()
+    }
+    await initializeSuperAdmins()
+    console.log("✅ Enhanced Vintage & Crap Coin Store Bot initialized successfully!")
+    console.log("👑 Super Admin IDs:", Array.from(SUPER_ADMIN_IDS))
+    console.log("🔔 Notification Bot:", notificationBot ? "Enabled" : "Disabled")
+  } catch (error) {
+    console.error("❌ Error setting up enhanced bot:", error)
+  }
 }
 
 // Initialize bot
-setupBot().catch((err) =>
-{
+setupBot().catch((err) => {
   console.error("❌ Error setting up enhanced bot:", err)
-}
-)
+})
 
 // Express routes
-app.get("/", async (req, res) =>
-{
+app.get("/", async (req, res) => {
   try {
     const transactionsSnapshot = await db.collection("transactions").get()
     const activeChatsSnapshot = await db.collection("chatSessions").where("status", "==", "active").get()
@@ -2319,7 +2323,7 @@ app.get("/", async (req, res) =>
       hasNotificationBot: !!process.env.NOTIFICATION_BOT_TOKEN,
       hasFirebase: !!process.env.FIREBASE_PROJECT_ID,
       features: [
-        \"✅ Complete Enhanced Customer Experience",
+        "✅ Complete Enhanced Customer Experience",
         "✅ Full Admin Panel with All Functions",
         "✅ Working Remove Staff Function",
         "✅ FIXED Active Chats Display",
@@ -2349,11 +2353,9 @@ app.get("/", async (req, res) =>
       error: "Could not fetch Firestore stats",
     })
   }
-}
-)
+})
 
-app.post("/webhook", async (req, res) =>
-{
+app.post("/webhook", async (req, res) => {
   try {
     await bot.handleUpdate(req.body)
     res.status(200).json({ ok: true })
@@ -2361,12 +2363,10 @@ app.post("/webhook", async (req, res) =>
     console.error("❌ Webhook error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
-}
-)
+})
 
 // Webhook for notification bot (if enabled)
-app.post("/notification-webhook", async (req, res) =>
-{
+app.post("/notification-webhook", async (req, res) => {
   try {
     if (notificationBot) {
       await notificationBot.handleUpdate(req.body)
@@ -2376,8 +2376,7 @@ app.post("/notification-webhook", async (req, res) =>
     console.error("❌ Notification webhook error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
-}
-)
+})
 
 // Start server
 const PORT = process.env.PORT || 3000
@@ -2398,7 +2397,7 @@ app.listen(PORT, () => {
   console.log("   • ✅ Real-time Chat Support")
 })
 
-async function handleTransactionType(ctx, type) {
+async function handleTransactionTypeInner(ctx, type) {
   try {
     const userId = ctx.from?.id
     if (!userId) return
@@ -2548,34 +2547,6 @@ async function showCustomerHelp(ctx) {
     )
   } catch (error) {
     console.error("Error in showCustomerHelp:", error)
-    await ctx.reply("❌ Sorry, there was an error. Please try again.")
-  }
-}
-
-async function handleTransactionType(ctx, type) {
-  try {
-    const userId = ctx.from?.id
-    if (!userId) return
-
-    await setUserSession(userId, {
-      step: "select_token",
-      transactionType: type,
-    })
-
-    const tokenButtons = AVAILABLE_TOKENS.map((token) => [{ text: `${token.symbol} - ${token.name}` }])
-    tokenButtons.push([{ text: "🔍 Custom Token (Contract Address)" }])
-    tokenButtons.push([{ text: "🔙 Back to Menu" }])
-
-    await ctx.reply(`💼 <b>${type.toUpperCase()} CRYPTOCURRENCY</b>\n\n` + `Select the token you want to ${type}:`, {
-      parse_mode: "HTML",
-      reply_markup: {
-        keyboard: tokenButtons,
-        resize_keyboard: true,
-        one_time_keyboard: true,
-      },
-    })
-  } catch (error) {
-    console.error("Error in handleTransactionType:", error)
     await ctx.reply("❌ Sorry, there was an error. Please try again.")
   }
 }
